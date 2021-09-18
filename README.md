@@ -1,2 +1,2 @@
 # schemepp
-An C++ implementation of the Scheme programming language
+An implementation of the Scheme programming language in C++
