@@ -3,6 +3,8 @@
 // ReSharper disable CppInconsistentNaming
 // ReSharper disable CppClangTidyCppcoreguidelinesMacroUsage
 #include "Interface/AST.hpp"
+#include "Interface/Error.hpp"
+#include "Interface/EvaluateContext.hpp"
 #include <boost/fusion/include/adapt_struct.hpp>
 #include <boost/spirit/home/x3.hpp>
 #include <boost/spirit/home/x3/support/ast/position_tagged.hpp>
@@ -19,8 +21,8 @@ namespace schemepp {
 
     public:
         explicit Constant(Ref<Value> val) : mVal{ std::move(val) } {}
-        Result<Ref<Value>> evaluate(EvaluateContext&) const override {
-            return Result{ mVal };
+        Ref<Value> evaluate(EvaluateContext&) const override {
+            return mVal;
         }
         void printAST(std::ostream& stream) const override {
             stream << "(constant ";
@@ -34,7 +36,7 @@ namespace schemepp {
 
     public:
         explicit SymbolReference(std::string symbol) : mSymbol{ std::move(symbol) } {}
-        Result<Ref<Value>> evaluate(EvaluateContext& context) const override {
+        Ref<Value> evaluate(EvaluateContext& context) const override {
             return context.scope.lookup(mSymbol);
         }
         void printAST(std::ostream& stream) const override {
@@ -43,19 +45,15 @@ namespace schemepp {
     };
 
     template <typename DstContainer, typename SrcContainer>
-    [[nodiscard]] Result<DstContainer> evaluateValues(EvaluateContext& context, const SrcContainer& src) {
+    [[nodiscard]] DstContainer evaluateValues(EvaluateContext& context, const SrcContainer& src) {
         DstContainer values;
         if constexpr(std::is_same_v<DstContainer, std::vector<Ref<Value>>>)
             values.reserve(src.size());
 
         for(auto& child : src) {
-            if(auto val = child->evaluate(context)) {
-                values.push_back(std::move(val.get()));
-            } else {
-                return Result<DstContainer>{ val.error() };
-            }
+            values.push_back(child->evaluate(context));
         }
-        return Result<DstContainer>{ values };
+        return values;
     }
 
     class VectorConstructor final : public Node {
@@ -63,11 +61,8 @@ namespace schemepp {
 
     public:
         explicit VectorConstructor(std::vector<Ref<Node>> values) : mValues{ std::move(values) } {}
-        Result<Ref<Value>> evaluate(EvaluateContext& context) const override {
-            if(auto res = evaluateValues<std::vector<Ref<Value>>>(context, mValues)) {
-                return Result{ makeVector(std::move(res.get())) };
-            } else
-                return Result<Ref<Value>>{ std::move(res.error()) };
+        Ref<Value> evaluate(EvaluateContext& context) const override {
+            return makeVector(evaluateValues<std::vector<Ref<Value>>>(context, mValues));
         }
         void printAST(std::ostream& stream) const override {
             stream << "(vector [ ";
@@ -84,11 +79,8 @@ namespace schemepp {
 
     public:
         explicit ListConstructor(std::vector<Ref<Node>> values) : mValues{ std::move(values) } {}
-        Result<Ref<Value>> evaluate(EvaluateContext& context) const override {
-            if(auto res = evaluateValues<std::list<Ref<Value>>>(context, mValues)) {
-                return Result{ makeList(std::move(res.get())) };
-            } else
-                return Result<Ref<Value>>{ std::move(res.error()) };
+        Ref<Value> evaluate(EvaluateContext& context) const override {
+            return makeList(evaluateValues<std::list<Ref<Value>>>(context, mValues));
         }
         void printAST(std::ostream& stream) const override {
             stream << "(list [ ";
@@ -107,19 +99,13 @@ namespace schemepp {
     public:
         explicit ProcedureCall(Ref<Node> operator_, std::vector<Ref<Node>> operands)
             : mOperator{ std::move(operator_) }, mOperands{ std::move(operands) } {}
-        Result<Ref<Value>> evaluate(EvaluateContext& context) const override {
-            if(auto operator_ = mOperator->evaluate(context)) {
-                auto& op = operator_.get();
-                if(op->type() != ValueType::procedure)
-                    return Result<Ref<Value>>{ Error{ "Operator is not callable" } };
+        Ref<Value> evaluate(EvaluateContext& context) const override {
+            auto operator_ = mOperator->evaluate(context);
+            if(operator_->type() != ValueType::procedure)
+                throwMismatchedOperandTypeError(context, 0, ValueType::procedure, operator_->type());
 
-                if(auto operands = evaluateValues<std::vector<Ref<Value>>>(context, mOperands)) {
-                    return dynamic_cast<Procedure*>(op.get())->apply(context, operands.get());
-                } else
-                    return Result<Ref<Value>>{ std::move(operands.error()) };
-            } else {
-                return Result<Ref<Value>>{ std::move(operator_.error()) };
-            }
+            auto operands = evaluateValues<std::vector<Ref<Value>>>(context, mOperands);
+            return dynamic_cast<Procedure*>(operator_.get())->apply(context, operands);
         }
 
         void printAST(std::ostream& stream) const override {
@@ -141,26 +127,15 @@ namespace schemepp {
     public:
         explicit Conditional(Ref<Node> condition, Ref<Node> then, Ref<Node> else_)
             : mCondition{ std::move(condition) }, mThenPart{ std::move(then) }, mElsePart{ std::move(else_) } {}
-        Result<Ref<Value>> evaluate(EvaluateContext& context) const override {
-            if(auto condition = mCondition->evaluate(context)) {
-                if(toBoolean(condition.get())) {
-                    if(auto res = mThenPart->evaluate(context)) {
-                        return Result{ std::move(res.get()) };
-                    } else {
-                        return Result<Ref<Value>>{ std::move(res.error()) };
-                    }
-                }
+        Ref<Value> evaluate(EvaluateContext& context) const override {
+            if(asBoolean(mCondition->evaluate(context))) {
+                return mThenPart->evaluate(context);
+            }
 
-                if(mElsePart) {
-                    if(auto res = mElsePart->evaluate(context)) {
-                        return Result{ std::move(res.get()) };
-                    } else {
-                        return Result<Ref<Value>>{ std::move(res.error()) };
-                    }
-                }
-                return Result{ constantBoolean(false) };
-            } else
-                return Result<Ref<Value>>{ std::move(condition.error()) };
+            if(mElsePart) {
+                return mElsePart->evaluate(context);
+            }
+            return constantBoolean(false);
         }
         void printAST(std::ostream& stream) const override {
             stream << "(if ";
@@ -180,11 +155,8 @@ namespace schemepp {
 
     public:
         explicit Sequence(std::vector<Ref<Node>> sequence) : mSequence{ std::move(sequence) } {}
-        Result<Ref<Value>> evaluate(EvaluateContext& context) const override {
-            if(auto values = evaluateValues<std::vector<Ref<Value>>>(context, mSequence)) {
-                return Result{ std::move(values.get().back()) };
-            } else
-                return Result<Ref<Value>>{ std::move(values.error()) };
+        Ref<Value> evaluate(EvaluateContext& context) const override {
+            return evaluateValues<std::vector<Ref<Value>>>(context, mSequence).back();
         }
         void printAST(std::ostream& stream) const override {
             stream << "(begin";
@@ -201,16 +173,12 @@ namespace schemepp {
 
     public:
         explicit LogicOr(std::vector<Ref<Node>> sequence) : mSequence{ std::move(sequence) } {}
-        Result<Ref<Value>> evaluate(EvaluateContext& context) const override {
+        Ref<Value> evaluate(EvaluateContext& context) const override {
             for(auto& child : mSequence) {
-                if(auto val = child->evaluate(context)) {
-                    if(toBoolean(val.get()))
-                        return Result{ constantBoolean(true) };
-                } else {
-                    return Result<Ref<Value>>{ std::move(val.error()) };
-                }
+                if(asBoolean(child->evaluate(context)))
+                    return constantBoolean(true);
             }
-            return Result{ constantBoolean(false) };
+            return constantBoolean(false);
         }
         void printAST(std::ostream& stream) const override {
             stream << "(or";
@@ -227,16 +195,12 @@ namespace schemepp {
 
     public:
         explicit LogicAnd(std::vector<Ref<Node>> sequence) : mSequence{ std::move(sequence) } {}
-        Result<Ref<Value>> evaluate(EvaluateContext& context) const override {
+        Ref<Value> evaluate(EvaluateContext& context) const override {
             for(auto& child : mSequence) {
-                if(auto val = child->evaluate(context)) {
-                    if(!toBoolean(val.get()))
-                        return Result{ constantBoolean(false) };
-                } else {
-                    return Result<Ref<Value>>{ std::move(val.error()) };
-                }
+                if(!asBoolean(child->evaluate(context)))
+                    return constantBoolean(false);
             }
-            return Result{ constantBoolean(true) };
+            return constantBoolean(true);
         }
         void printAST(std::ostream& stream) const override {
             stream << "(and";
@@ -256,14 +220,11 @@ namespace schemepp {
     public:
         explicit Definition(std::string symbol, Ref<Node> expr, const bool assignment)
             : mSymbol{ std::move(symbol) }, mExpr{ std::move(expr) }, mAssignment{ assignment } {}
-        Result<Ref<Value>> evaluate(EvaluateContext& context) const override {
-            if(auto val = mExpr->evaluate(context)) {
-                if(mAssignment)
-                    return context.scope.assign(mSymbol, val.get());
-                return context.scope.insert(mSymbol, val.get());
-            } else {
-                return Result<Ref<Value>>{ std::move(val.error()) };
-            }
+        Ref<Value> evaluate(EvaluateContext& context) const override {
+            auto val = mExpr->evaluate(context);
+            if(mAssignment)
+                return context.scope.assign(mSymbol, std::move(val));
+            return context.scope.insert(mSymbol, std::move(val));
         }
         void printAST(std::ostream& stream) const override {
             stream << "(define " << mSymbol << ' ';
@@ -564,7 +525,7 @@ namespace schemepp {
         // External Representations
         constexpr auto buildLabeledDatum = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto labeledDatum_def = (label >> '=' >> datum)[buildLabeledDatum];
         constexpr auto datum_def = simpleDatum | compoundDatum | labeledDatum | (label >> '#');
@@ -573,7 +534,7 @@ namespace schemepp {
 
         constexpr auto buildAbbreviation = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto abbreviation_def = ((x3::lit('\'') | '`' | ',' | x3::lit(",@")) >> datum)[buildAbbreviation];
         constexpr auto buildVector = [](auto& ctx) {
@@ -582,7 +543,7 @@ namespace schemepp {
         const auto vector_def = (x3::lit("#(") >> *datum >> ')')[buildVector];
         constexpr auto buildLabel = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto label_def = (x3::lit('#') >> x3::uint_)[buildLabel];
         constexpr auto buildList1 = [](auto& ctx) {
@@ -618,18 +579,18 @@ namespace schemepp {
         const auto procedureCall_def = ('(' >> expr >> (*expr) >> ')')[buildProcedureCall];
         constexpr auto buildLambda = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto lambda_def = ('(' >> x3::lit("lambda") >> formal >> body >> ')')[buildLambda];
         constexpr auto buildFormal = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto formal_def =
             (('(' >> (*identifier) >> ')') | identifier | ('(' >> (+identifier) >> '.' >> identifier >> ')'))[buildFormal];
         constexpr auto buildBody = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto body_def = ((*definition) >> sequence)[buildBody];
         constexpr auto buildSequence = [](auto& ctx) { x3::_val(ctx) = { makeRefCount<Sequence>(removePack(x3::_attr(ctx))) }; };
@@ -649,29 +610,29 @@ namespace schemepp {
         const auto assignment_def = ('(' >> x3::lit("set!") >> identifierPattern >> expr >> ')')[buildAssignment];
         constexpr auto buildCond1 = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto cond1_def = ('(' >> x3::lit("cond") >> (+condClause) >> ')')[buildCond1];
         constexpr auto buildCond2 = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto cond2_def =
             ('(' >> x3::lit("cond") >> (*condClause) >> '(' >> x3::lit("else") >> sequence >> ')' >> ')')[buildCond2];
         constexpr auto buildCase1 = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto case1_def = ('(' >> x3::lit("case") >> expr >> (+caseClause) >> ')')[buildCase1];
         constexpr auto buildCase2 = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto case2_def =
             ('(' >> x3::lit("case") >> expr >> (*caseClause) >> '(' >> x3::lit("else") >> sequence >> ")" >> ")")[buildCase2];
         constexpr auto buildCase3 = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto case3_def = ('(' >> x3::lit("case") >> expr >> (*caseClause) >> '(' >> x3::lit("else") >> x3::lit("=>") >>
                                 expr >> ')' >> ')')[buildCase3];
@@ -681,33 +642,33 @@ namespace schemepp {
         const auto logicAnd_def = ('(' >> x3::lit("and") >> (*expr) >> ')')[buildLogicAnd];
         constexpr auto buildWhen = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto when_def = ('(' >> x3::lit("when") >> expr >> sequence >> ')')[buildWhen];
         constexpr auto buildUnless = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto unless_def = ('(' >> x3::lit("unless") >> expr >> sequence >> ')')[buildUnless];
         constexpr auto buildLet1 = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto let1_def = ('(' >> x3::lit("let") >> '(' >> *bindingSpec >> ')' >> body >> ')')[buildLet1];
         constexpr auto buildLet2 = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto let2_def = ('(' >> x3::lit("let") >> identifier >> '(' >> *bindingSpec >> ')' >> body >> ')')[buildLet2];
         constexpr auto buildLet3 = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto let3_def = ('(' >> (x3::lit("let*") | x3::lit("letrec") | x3::lit("letrec*")) >> '(' >> *bindingSpec >> ')' >>
                                body >> ')')[buildLet3];
         constexpr auto buildLet4 = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto let4_def =
             ('(' >> (x3::lit("let-values") | x3::lit("let*-values")) >> '(' >> *mvBindingSpec >> ')' >> body >> ')')[buildLet4];
@@ -715,34 +676,34 @@ namespace schemepp {
         constexpr auto begin_def = '(' >> x3::lit("begin") >> sequence >> ')';
         constexpr auto buildDo = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto doStatement_def =
             ('(' >> x3::lit("do") >> '(' >> *iterSpec >> ')' >> '(' >> expr >> doResult >> ')' >> *expr >> ')')[buildDo];
         constexpr auto buildDelay = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto delay_def = ('(' >> x3::lit("delay") >> expr >> ')')[buildDelay];
         constexpr auto buildDelayForce = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto delayForce_def = ('(' >> x3::lit("delay-force") >> expr >> ')')[buildDelayForce];
         constexpr auto buildParameterize = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto parameterize_def =
             ('(' >> x3::lit("parameterize") >> '(' >> *('(' >> expr >> expr >> ')') >> ')' >> body >> ')')[buildParameterize];
         constexpr auto buildGuard = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto guard_def = ('(' >> x3::lit("guard") >> '(' >> identifier >> *condClause >> ')' >> body >> ')')[buildGuard];
         constexpr auto buildCaseLambda = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto caseLambda_def = ('(' >> x3::lit("case-lambda") >> *caseLambdaClause >> ')')[buildCaseLambda];
         constexpr auto derived_def = begin | cond1 | cond2 | case1 | case2 | case3 | logicOr | logicAnd | when | unless | let1 |
@@ -750,94 +711,94 @@ namespace schemepp {
 
         constexpr auto buildCondClause1 = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto condClause1_def = ('(' >> expr >> sequence >> ')')[buildCondClause1];
         constexpr auto buildCondClause2 = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto condClause2_def = ('(' >> expr >> ')')[buildCondClause2];
         constexpr auto buildCondClause3 = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto condClause3_def = ('(' >> expr >> x3::lit("=>") >> expr >> ')')[buildCondClause3];
         constexpr auto condClause_def = condClause1 | condClause2 | condClause3;
         constexpr auto buildCaseClause1 = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto caseClause1_def = (x3::lit('(') >> '(' >> *datum >> ')' >> sequence >> ')')[buildCaseClause1];
         constexpr auto buildCaseClause2 = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto caseClause2_def = (x3::lit('(') >> '(' >> *datum >> ')' >> x3::lit("=>") >> expr >> ')')[buildCaseClause2];
         constexpr auto caseClause_def = caseClause1 | caseClause2;
         constexpr auto buildBindingSpec = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto bindingSpec_def = ('(' >> identifier >> expr >> ')')[buildBindingSpec];
         constexpr auto buildMvBindingSpec = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto mvBindingSpec_def = ('(' >> formal >> expr >> ')')[buildMvBindingSpec];
         constexpr auto buildIterSpec1 = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto iterSpec1_def = ('(' >> identifier >> expr >> expr >> ')')[buildIterSpec1];
         constexpr auto buildIterSpec2 = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto iterSpec2_def = ('(' >> identifier >> expr >> ')')[buildIterSpec2];
         constexpr auto iterSpec_def = iterSpec1 | iterSpec2;
         constexpr auto buildCaseLambdaClause = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto caseLambdaClause_def = ('(' >> formal >> body >> ')')[buildCaseLambdaClause];
         constexpr auto buildDoResult = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto doResult_def = (-sequence)[buildDoResult];
         constexpr auto buildMacroUse = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto macroUse_def = ('(' >> identifier >> *datum >> ')')[buildMacroUse];
         constexpr auto buildMacroBlock = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto macroBlock_def = ('(' >> (x3::lit("let-syntax") | x3::lit("letrec-syntax")) >> '(' >> *syntaxSpec >> ')' >>
                                      body >> ')')[buildMacroBlock];
         constexpr auto buildSyntaxSpec = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto syntaxSpec_def = ('(' >> identifier >> transformerSpec >> ')')[buildSyntaxSpec];
         constexpr auto buildInclude = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto include_def = ('(' >> (x3::lit("include") | x3::lit("include-ci")) >> +string >> ')')[buildInclude];
 
         // QuasiQuotations
         constexpr auto buildQuasiQuotation = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto quasiQuotation_def = x3::lit("quasiQuotation_def")[buildQuasiQuotation];
         // Transformers
         constexpr auto buildTransformerSpec = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto transformerSpec_def = x3::lit("transformerSpec_def")[buildTransformerSpec];
         // Programs & Definitions
@@ -848,45 +809,45 @@ namespace schemepp {
         const auto definition1_def = ('(' >> x3::lit("define") >> identifierPattern >> expr >> ')')[buildDefinition1];
         constexpr auto buildDefinition2 = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto definition2_def =
             ('(' >> x3::lit("define") >> '(' >> identifier >> definitionFormal >> ')' >> body >> ')')[buildDefinition2];
         constexpr auto buildDefinition3 = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto definition3_def = ('(' >> x3::lit("define-syntax") >> identifier >> transformerSpec >> ')')[buildDefinition3];
         constexpr auto buildDefinition4 = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto definition4_def = ('(' >> x3::lit("define-values") >> formal >> body >> ')')[buildDefinition4];
         constexpr auto buildDefinition5 = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto definition5_def = ('(' >> x3::lit("define-record-type") >> identifier >> constructor >> identifier >>
                                       *fieldSpec >> ')')[buildDefinition5];
         constexpr auto buildDefinition6 = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto definition6_def = ('(' >> x3::lit("begin") >> *definition >> ')')[buildDefinition6];
         constexpr auto definition_def = definition1 | definition2 | definition3 | definition4 | definition5 | definition6;
         constexpr auto buildDefinitionFormal = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto definitionFormal_def = ((*identifier) | (*identifier >> '.' >> identifier))[buildDefinitionFormal];
         constexpr auto buildConstructor = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto constructor_def = ('(' >> identifier >> *identifier >> ')')[buildConstructor];
         constexpr auto buildFieldSpec = [](auto& ctx) {
             // TODO: Not implemented
-            throw NotImplemented();
+            throwNotImplementedError();
         };
         const auto fieldSpec_def =
             (('(' >> identifier >> identifier >> ')') | ('(' >> identifier >> identifier >> identifier >> ')'))[buildFieldSpec];
@@ -907,7 +868,7 @@ namespace schemepp {
                             caseClause2, list1, list2, complexPart, identifierPattern)
     };  // namespace parser
 
-    Result<Ref<Node>> parse(std::string_view statement) {
+    Ref<Node> parse(std::string_view statement) {
         auto iter = statement.cbegin();
         using Iterator = std::string_view::const_iterator;
         using ErrorHandler = x3::error_handler<Iterator>;
@@ -924,11 +885,11 @@ namespace schemepp {
             if(iter == statement.end()) {
                 std::cout << std::endl << std::endl;
 
-                return Result{ std::move(res.root) };
+                return std::move(res.root);
             }
-            return Result<Ref<Node>>{ Error{ "not finished" } };
+            throw Error{ "not finished" };
         }
 
-        return Result<Ref<Node>>{ Error{ errorMessage.str() } };
+        throw Error{ errorMessage.str() };
     }
 }  // namespace schemepp

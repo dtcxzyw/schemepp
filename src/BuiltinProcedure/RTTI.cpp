@@ -8,19 +8,27 @@ namespace schemepp {
 
 #define PREFIX "Builtin.BaseLibrary.RTTI."
 
-#define BUILTIN_RTTI_DEFINE(CLASS, TYPE)                                                               \
-    class CLASS final : public Procedure {                                                             \
-    public:                                                                                            \
-        void printValue(std::ostream& stream) const override {                                         \
-            stream << PREFIX #CLASS;                                                                   \
-        }                                                                                              \
-        Result<Ref<Value>> apply(EvaluateContext&, const std::vector<Ref<Value>>& operands) override { \
-            if(operands.size() != 1)                                                                   \
-                return Result<Ref<Value>>{ Error{                                                      \
-                    fmt::format("Wrong operands count. Expect 1, but got {}.", operands.size()) } };   \
-                                                                                                       \
-            return Result{ constantBoolean(operands[0]->type() == ValueType::TYPE) };                  \
-        }                                                                                              \
+    class RTTIBase : public Procedure {
+    public:
+        virtual bool checkType(ValueType type) const noexcept = 0;
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) final {
+            if(operands.size() != 1)
+                throwWrongOperandCountError(ctx, 1 << 1, operands.size());
+
+            const auto type = operands[0]->type();
+            return constantBoolean(checkType(type));
+        }
+    };
+
+#define BUILTIN_RTTI_DEFINE(CLASS, TYPE)                               \
+    class CLASS final : public RTTIBase {                              \
+    public:                                                            \
+        void printValue(std::ostream& stream) const override {         \
+            stream << PREFIX #CLASS;                                   \
+        }                                                              \
+        bool checkType(const ValueType type) const noexcept override { \
+            return type == ValueType::TYPE;                            \
+        }                                                              \
     }
 
     BUILTIN_RTTI_DEFINE(IsInteger, integer);
@@ -34,39 +42,27 @@ namespace schemepp {
     BUILTIN_RTTI_DEFINE(IsList, list);
     BUILTIN_RTTI_DEFINE(IsPair, pair);
 
-    class IsNumber final : public Procedure {
+#undef BUILTIN_RTTI_DEFINE
+
+    class IsNumber final : public RTTIBase {
     public:
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "IsNumber";
         }
-        Result<Ref<Value>> apply(EvaluateContext&, const std::vector<Ref<Value>>& operands) override {
-            if(operands.size() != 1)
-                return Result<Ref<Value>>{ Error{ fmt::format("Wrong operands count. Expect 1, but got {}.", operands.size()) } };
-
-            const auto type = operands[0]->type();
-            const auto res = type == ValueType::complex || type == ValueType::integer || type == ValueType::real;
-
-            return Result{ constantBoolean(res) };
+        bool checkType(const ValueType type) const noexcept override {
+            return type == ValueType::integer || type == ValueType::complex || type == ValueType::real;
         }
     };
 
-    class IsRational final : public Procedure {
+    class IsRational final : public RTTIBase {
     public:
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "IsRational";
         }
-        Result<Ref<Value>> apply(EvaluateContext&, const std::vector<Ref<Value>>& operands) override {
-            if(operands.size() != 1)
-                return Result<Ref<Value>>{ Error{ fmt::format("Wrong operands count. Expect 1, but got {}.", operands.size()) } };
-
-            const auto type = operands[0]->type();
-            const auto res = type == ValueType::integer || type == ValueType::real;
-
-            return Result{ constantBoolean(res) };
+        bool checkType(ValueType type) const noexcept override {
+            return type == ValueType::integer || type == ValueType::real;
         }
     };
-
-#undef BUILTIN_RTTI_DEFINE
 
     void initializeBuiltinRTTIProcedure(Scope& scope) {
 #define ADD_BUILTIN_PROCEDURE(NAME, CLASS) scope.insert(NAME, makeRefCount<CLASS>())  // NOLINT(cppcoreguidelines-macro-usage)

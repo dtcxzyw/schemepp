@@ -24,4 +24,11 @@ namespace schemepp {
     Ref<Value> makeVector(std::vector<Ref<Value>> values) {
         return makeRefCount<VectorImpl>(std::move(values));
     }
+
+    const std::vector<Ref<Value>>& asVector(const Ref<Value>& value) {
+        if(value->type() == ValueType::vector) {
+            return dynamic_cast<const VectorValue*>(value.get())->ref();
+        }
+        throwMismatchedOperandTypeError(ValueType::vector, value->type());
+    }
 }  // namespace schemepp

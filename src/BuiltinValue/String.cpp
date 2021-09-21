@@ -20,4 +20,11 @@ namespace schemepp {
     Ref<Value> constantString(std::string val) {
         return makeRefCount<StringImpl>(std::move(val));
     }
+
+    const std::string& asString(const Ref<Value>& value) {
+        if(value->type() == ValueType::string) {
+            return dynamic_cast<const StringValue*>(value.get())->ref();
+        }
+        throwMismatchedOperandTypeError(ValueType::string, value->type());
+    }
 }  // namespace schemepp

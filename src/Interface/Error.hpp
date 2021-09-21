@@ -5,9 +5,18 @@
 #include <string>
 
 namespace schemepp {
-    struct Error final {
-        std::string errorMessage;
-    };
+    class Error final : public std::exception {
+        std::string mErrorMessage;
 
-    std::ostream& operator<<(std::ostream& stream, const Error& error);
+    public:
+        explicit Error(std::string errorMessage) : mErrorMessage{ std::move(errorMessage) } {}
+
+        [[nodiscard]] char const* what() const override {
+            return mErrorMessage.c_str();
+        }
+    };
+    
+    [[noreturn]] void throwNotImplementedError();
+    [[noreturn]] void throwInternalError();
+
 }  // namespace schemepp

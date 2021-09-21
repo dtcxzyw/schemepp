@@ -20,7 +20,7 @@ namespace schemepp {
         return makeRefCount<BooleanImpl>(val);
     }
 
-    bool toBoolean(const Ref<Value>& condition) {
-        return (condition->type() != ValueType::boolean) || dynamic_cast<const BooleanValue*>(condition.get())->value();
+    bool asBoolean(const Ref<Value>& value) {
+        return (value->type() != ValueType::boolean) || dynamic_cast<const BooleanValue*>(value.get())->value();
     }
 }  // namespace schemepp

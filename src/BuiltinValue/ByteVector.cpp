@@ -23,4 +23,11 @@ namespace schemepp {
     Ref<Value> constantByteVector(std::vector<uint8_t> val) {
         return makeRefCount<ByteVectorImpl>(std::move(val));
     }
+
+    const std::vector<uint8_t>& asByteVector(const Ref<Value>& value) {
+        if(value->type() == ValueType::byteVector) {
+            return dynamic_cast<const ByteVectorValue*>(value.get())->ref();
+        }
+        throwMismatchedOperandTypeError(ValueType::byteVector, value->type());
+    }
 }  // namespace schemepp

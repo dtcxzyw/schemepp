@@ -35,33 +35,27 @@ namespace schemepp {
 
 #undef BUILTIN_CHAR_COMPARER
 
-    static uint32_t toChar(const Ref<Value>& val) {
-        return dynamic_cast<const CharacterValue*>(val.get())->value();
-    }
-
     template <typename Comparer>
     class CharCompare final : public Procedure {
     public:
         void printValue(std::ostream& stream) const override {
             stream << Comparer::name() << Comparer::config();
         }
-        Result<Ref<Value>> apply(EvaluateContext&, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
             if(operands.empty())
-                return Result<Ref<Value>>{ Error{ "No operand" } };
+                throwNoOperandError(ctx);
 
-            for(auto&& operand : operands) {
-                if(operand->type() != ValueType::character)
-                    return Result<Ref<Value>>{ Error{ "Unsupported type" } };
+            uint32_t last = asCharacter(operands[0]);
+
+            for(size_t i = 1; i < operands.size(); ++i) {
+                uint32_t cur = asCharacter(operands[i]);
+                if(!Comparer::compare(last, cur)) {
+                    return constantBoolean(false);
+                }
+                last = cur;
             }
 
-            bool res = true;
-            for(size_t i = 1; i < operands.size(); ++i)
-                if(!Comparer::compare(toChar(operands[i - 1]), toChar(operands[i]))) {
-                    res = false;
-                    break;
-                }
-
-            return Result{ constantBoolean(res) };
+            return constantBoolean(true);
         }
     };
 
@@ -71,22 +65,17 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX << (Direction ? "UpCase" : "DownCase");
         }
-        Result<Ref<Value>> apply(EvaluateContext&, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
             if(operands.size() != 1)
-                return Result<Ref<Value>>{ Error{
-                    Error{ fmt::format("Wrong operands count. Expect 1, but got {}.", operands.size()) } } };
+                throwWrongOperandCountError(ctx, 1 << 1, operands.size());
 
-            auto& operand = operands[0];
-            if(operand->type() != ValueType::character)
-                return Result<Ref<Value>>{ Error{ "Unsupported type" } };
-
-            uint32_t val = toChar(operand);
+            uint32_t val = asCharacter(operands[0]);
 
             if(std::isalpha(val)) {
                 val = (Direction ? std::toupper : std::tolower)(val);
             }
 
-            return Result{ constantCharacter(val) };
+            return constantCharacter(val);
         }
     };
 
@@ -95,18 +84,15 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "StringConstructor";
         }
-        Result<Ref<Value>> apply(EvaluateContext&, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext&, const std::vector<Ref<Value>>& operands) override {
             std::string str;
             const std::back_insert_iterator iter{ str };
 
             for(auto&& operand : operands) {
-                if(operand->type() != ValueType::character)
-                    return Result<Ref<Value>>{ Error{ "Unsupported type" } };
-
-                utf8::append(dynamic_cast<const CharacterValue*>(operand.get())->value(), iter);
+                utf8::append(asCharacter(operand), iter);
             }
 
-            return Result{ constantString(std::move(str)) };
+            return constantString(std::move(str));
         }
     };
 
@@ -115,31 +101,22 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "StringRef";
         }
-        Result<Ref<Value>> apply(EvaluateContext&, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
             if(operands.size() != 2)
-                return Result<Ref<Value>>{ Error{
-                    Error{ fmt::format("Wrong operands count. Expect 2, but got {}.", operands.size()) } } };
+                throwWrongOperandCountError(ctx, 1 << 2, operands.size());
 
-            if(operands[0]->type() != ValueType::string || operands[1]->type() != ValueType::integer) {
-                return Result<Ref<Value>>{ Error{ "Unsupported type" } };
-            }
-
-            auto& str = dynamic_cast<const StringValue*>(operands[0].get())->value();
-            auto offset = dynamic_cast<const IntegerValue*>(operands[1].get())->value();
+            auto& str = asString(operands[0]);
+            auto offset = asInteger(operands[1]);
 
             if(offset < 0)
-                return Result<Ref<Value>>{ Error{ "Wrong offset" } };
+                throwDomainError();
 
-            try {
-                auto iter = str.begin();
-                uint32_t cp = 0;
-                do {
-                    cp = utf8::next(iter, str.end());
-                } while(offset--);
-                return Result{ constantCharacter(cp) };
-            } catch(...) {
-                return Result<Ref<Value>>{ Error{ "Out of bound" } };
-            }
+            auto iter = str.begin();
+            uint32_t cp = 0;
+            do {
+                cp = utf8::next(iter, str.end());
+            } while(offset--);
+            return constantCharacter(cp);
         }
     };
 
@@ -148,17 +125,40 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "StringConcat";
         }
-        Result<Ref<Value>> apply(EvaluateContext&, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext&, const std::vector<Ref<Value>>& operands) override {
             std::string str;
+            for(auto&& operand : operands)
+                str += asString(operand);
+            return constantString(std::move(str));
+        }
+    };
 
-            for(auto&& operand : operands) {
-                if(operand->type() != ValueType::string)
-                    return Result<Ref<Value>>{ Error{ "Unsupported type" } };
+    class StringBuilder final : public Procedure {
+    public:
+        void printValue(std::ostream& stream) const override {
+            stream << PREFIX "StringBuilder";
+        }
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+            if(operands.size() != 1 && operands.size() != 2)
+                throwWrongOperandCountError(ctx, (1 << 1) | (1 << 2), operands.size());
 
-                str += dynamic_cast<const StringValue*>(operand.get())->value();
+            auto count = asInteger(operands[0]);
+            if(count <= 0)
+                throwDomainError();
+
+            uint32_t val = operands.size() == 2 ? asCharacter(operands[1]) : '\0';
+
+            std::string base;
+            std::back_insert_iterator iter{ base };
+            utf8::append(val, iter);
+
+            std::string str;
+            str.reserve(base.size() * count);
+            while(count--) {
+                str += base;
             }
 
-            return Result{ constantString(std::move(str)) };
+            return constantString(std::move(str));
         }
     };
 
@@ -172,23 +172,21 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << Comparer::name() << Comparer::config();
         }
-        Result<Ref<Value>> apply(EvaluateContext&, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
             if(operands.empty())
-                return Result<Ref<Value>>{ Error{ "No operand" } };
+                throwNoOperandError(ctx);
 
-            for(auto&& operand : operands) {
-                if(operand->type() != ValueType::string)
-                    return Result<Ref<Value>>{ Error{ "Unsupported type" } };
+            auto last = std::ref(asString(operands[0]));
+
+            for(size_t i = 1; i < operands.size(); ++i) {
+                auto cur = std::ref(asString(operands[i]));
+                if(!Comparer::compare(last.get(), cur.get())) {
+                    return constantBoolean(false);
+                }
+                last = cur;
             }
 
-            bool res = true;
-            for(size_t i = 1; i < operands.size(); ++i)
-                if(!Comparer::compare(toString(operands[i - 1]), toString(operands[i]))) {
-                    res = false;
-                    break;
-                }
-
-            return Result{ constantBoolean(res) };
+            return constantBoolean(true);
         }
     };
 
@@ -213,6 +211,7 @@ namespace schemepp {
         ADD_BUILTIN_PROCEDURE(string, StringConstructor);
         ADD_BUILTIN_PROCEDURE(string-ref, StringRef);
         ADD_BUILTIN_PROCEDURE(string-append, StringConcat);
+        ADD_BUILTIN_PROCEDURE(make-string,StringBuilder);
         // clang-format on
 #undef ADD_BUILTIN_PROCEDURE
     }

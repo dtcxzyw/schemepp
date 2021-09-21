@@ -3,9 +3,11 @@
 #include "Interface/Error.hpp"
 
 namespace schemepp {
-
-    std::ostream& operator<<(std::ostream& stream, const Error& error) {
-        return stream << error.errorMessage;
+    void throwInternalError() {
+        throw Error{ "Internal error" };
+    }
+    void throwNotImplementedError() {
+        throw Error{ "Not implemented" };
     }
 
 }  // namespace schemepp

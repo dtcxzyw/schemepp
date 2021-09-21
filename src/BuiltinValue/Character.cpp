@@ -26,4 +26,11 @@ namespace schemepp {
     Ref<Value> constantCharacter(const uint32_t val) {
         return makeRefCount<CharacterImpl>(val);
     }
+
+    uint32_t asCharacter(const Ref<Value>& value) {
+        if(value->type() == ValueType::character) {
+            return dynamic_cast<const CharacterValue*>(value.get())->ref();
+        }
+        throwMismatchedOperandTypeError(ValueType::character, value->type());
+    }
 }  // namespace schemepp

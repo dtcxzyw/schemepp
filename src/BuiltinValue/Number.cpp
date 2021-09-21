@@ -22,6 +22,13 @@ namespace schemepp {
         return makeRefCount<IntegerImpl>(val);
     }
 
+    Integer asInteger(const Ref<Value>& value) {
+        if(value->type() == ValueType::integer) {
+            return dynamic_cast<const IntegerImpl*>(value.get())->ref();
+        }
+        throwMismatchedOperandTypeError(ValueType::integer, value->type());
+    }
+
     class RealImpl final : public RealValue {
         Real mVal;
 
@@ -65,5 +72,32 @@ namespace schemepp {
 
     Ref<Value> constantComplex(const Complex val) {
         return makeRefCount<ComplexImpl>(val);
+    }
+
+    Number asNumber(const Ref<Value>& value) {
+        if(value->type() == ValueType::integer) {
+            return dynamic_cast<const IntegerImpl*>(value.get())->ref();
+        }
+        if(value->type() == ValueType::real) {
+            return dynamic_cast<const RealImpl*>(value.get())->ref();
+        }
+        if(value->type() == ValueType::complex) {
+            return dynamic_cast<const ComplexImpl*>(value.get())->ref();
+        }
+        throwMismatchedOperandTypeError(ValueType::integer | ValueType::real | ValueType::complex, value->type());
+    }
+
+    Ref<Value> constantNumberImpl(const Integer value) {
+        return constantInteger(value);
+    }
+    Ref<Value> constantNumberImpl(const Real value) {
+        return constantReal(value);
+    }
+    Ref<Value> constantNumberImpl(const Complex value) {
+        return constantComplex(value);
+    }
+
+    Ref<Value> constantNumber(const Number& value) {
+        return std::visit([](auto x) { return constantNumberImpl(x); }, value);
     }
 }  // namespace schemepp

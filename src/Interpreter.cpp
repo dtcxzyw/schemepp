@@ -3,6 +3,7 @@
 #include "Interface/Interpreter.hpp"
 #include "Interface/AST.hpp"
 #include "Interface/BuiltinLibraries.hpp"
+#include "Interface/EvaluateContext.hpp"
 #include "Interface/Scope.hpp"
 #include <csignal>
 #include <rang.hpp>
@@ -62,20 +63,15 @@ namespace schemepp {
             initializeBuiltinRTTIProcedure(mContext.scope);
             initializeBuiltinWriteProcedure(mContext.scope);
             initializeBuiltinStringProcedure(mContext.scope);
+            initializeBuiltinMathProcedure(mContext.scope);
         }
 
-        [[nodiscard]] Result<std::string> execute(const std::string_view statement) override {
-            auto root = parse(statement);
-            if(root) {
-                auto res = root.get()->evaluate(mContext);
-                if(res) {
-                    std::stringstream ss;
-                    res.get()->printValue(ss);
-                    return Result{ ss.str() };
-                }
-                return Result<std::string>{ std::move(res.error()) };
-            }
-            return Result<std::string>{ std::move(root.error()) };
+        [[nodiscard]] std::string execute(const std::string_view statement) override {
+            const auto root = parse(statement);
+            const auto res = root->evaluate(mContext);
+            std::stringstream ss;
+            res->printValue(ss);
+            return ss.str();
         }
     };
 

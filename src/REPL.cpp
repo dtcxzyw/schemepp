@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <rang.hpp>
+#include <string>
 
 static void about() {
     std::cout << "schemepp [built " __DATE__ " at " __TIME__ "]" << std::endl;
@@ -45,11 +46,8 @@ int main(const int argc, char** argv) {
                 if(std::all_of(statement.cbegin(), statement.cend(), [](const char ch) { return !std::isgraph(ch); }))
                     continue;
                 try {
-                    if(auto res = interpreter->execute(statement)) {
-                        if(const auto str = res.get(); !str.empty())
-                            std::cout << rang::fg::magenta << "=> " << rang::fg::reset << str << std::endl;
-                    } else
-                        std::cout << rang::fg::red << res.error() << rang::fg::reset << std::endl;
+                    if(const auto str = interpreter->execute(statement); !str.empty())
+                        std::cout << rang::fg::magenta << "=> " << rang::fg::reset << str << std::endl;
                 } catch(std::exception& error) {
                     std::cerr << rang::fg::red << error.what() << rang::fg::reset << std::endl;
                 }
@@ -60,13 +58,10 @@ int main(const int argc, char** argv) {
         if(argc == 2) {
             // direct execute mode
             using namespace std::string_literals;
-            if(auto res = interpreter->execute("(load "s + argv[1] + ")")) {
-                return EXIT_SUCCESS;
-            } else {
-                std::cout << rang::fg::red << res.error() << rang::fg::reset << std::endl;
-                return EXIT_FAILURE;
-            }
+            auto res = interpreter->execute("(load "s + argv[1] + ")");
+            return EXIT_SUCCESS;
         }
+
         {
             about();
             std::cerr << rang::fg::red << "[FATAL] Unrecognized Command" << rang::fg::reset << std::endl;

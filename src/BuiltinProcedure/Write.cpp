@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
-#include "Interface/AST.hpp"
+#include "Interface/Error.hpp"
+#include "Interface/EvaluateContext.hpp"
 #include "Interface/Scope.hpp"
 #include "Interface/Value.hpp"
 #include <fmt/format.h>
@@ -13,27 +14,26 @@ namespace schemepp {
         virtual void apply(const Ref<Value>& val, std::ostream& stream) = 0;
 
     private:
-        Result<Ref<Value>> apply(const Ref<Value>& val, const Port* port) {
+        Ref<Value> apply(const Ref<Value>& val, const Port* port) {
             if(const auto outputStream = port->output()) {
                 auto&& stream = outputStream.value().get();
                 apply(val, stream);
-                return Result{ constantBoolean(static_cast<bool>(stream)) };
+                return constantBoolean(static_cast<bool>(stream));
             }
-            return Result<Ref<Value>>{ Error{ "Expect output port." } };
+            throw Error{ "Expect output port." };
         }
 
     public:
-        Result<Ref<Value>> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
             if(operands.size() == 2) {
                 if(operands[1]->type() != ValueType::port)
-                    return Result<Ref<Value>>{ Error{ "Expect port operands for second argument." } };
+                    throwMismatchedOperandTypeError(ctx, 1, ValueType::port, operands[1]->type());
                 return apply(operands[0], dynamic_cast<const Port*>(operands[1].get()));
             }
             if(operands.size() == 1) {
                 return apply(operands[0], ctx.currentOutputPort.get());
             }
-            return Result<Ref<Value>>{ Error{
-                fmt::format("Wrong operands count. Expect 1 or 2, but got {}.", operands.size()) } };
+            throwWrongOperandCountError(ctx, (1 << 1) | (1 << 2), operands.size());
         }
     };
 
@@ -48,31 +48,29 @@ namespace schemepp {
     };
 
     class Newline final : public Procedure {
-
-        static Result<Ref<Value>> apply(const Port* port) {
+        static Ref<Value> apply(const Port* port) {
             if(const auto outputStream = port->output()) {
                 auto&& stream = outputStream.value().get();
                 stream << '\n';
-                return Result{ constantBoolean(static_cast<bool>(stream)) };
+                return constantBoolean(static_cast<bool>(stream));
             }
-            return Result<Ref<Value>>{ Error{ "Expect output port." } };
+            throw Error{ "Expect output port." };
         }
 
     public:
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "Newline";
         }
-        Result<Ref<Value>> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
             if(operands.size() == 1) {
                 if(operands[1]->type() != ValueType::port)
-                    return Result<Ref<Value>>{ Error{ "Expect port operands for second argument." } };
+                    throwMismatchedOperandTypeError(ctx, 1, ValueType::port, operands[1]->type());
                 return apply(dynamic_cast<const Port*>(operands[1].get()));
             }
             if(operands.empty()) {
                 return apply(ctx.currentOutputPort.get());
             }
-            return Result<Ref<Value>>{ Error{
-                fmt::format("Wrong operands count. Expect 0 or 1, but got {}.", operands.size()) } };
+            throwWrongOperandCountError(ctx, (1 << 0) | (1 << 1), operands.size());
         }
     };
 

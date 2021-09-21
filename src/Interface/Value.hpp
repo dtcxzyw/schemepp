@@ -2,11 +2,11 @@
 
 #pragma once
 #include "Common.hpp"
-#include "Result.hpp"
-
+#include "Value.hpp"
 #include <complex>
 #include <list>
 #include <optional>
+#include <variant>
 #include <vector>
 
 namespace schemepp {
@@ -21,21 +21,25 @@ namespace schemepp {
     class Scope;
     struct EvaluateContext;
 
-    enum class ValueType {
-        integer,
-        real,
-        complex,
-        boolean,
-        byteVector,
-        character,
-        list,
-        pair,
-        string,
-        vector,
-        procedure,
-        port,
-        symbol
+    enum class ValueType : uint32_t {
+        integer = 1 << 0,
+        real = 1 << 1,
+        complex = 1 << 2,
+        boolean = 1 << 3,
+        byteVector = 1 << 4,
+        character = 1 << 5,
+        list = 1 << 6,
+        pair = 1 << 7,
+        string = 1 << 8,
+        vector = 1 << 9,
+        procedure = 1 << 10,
+        port = 1 << 11,
+        symbol = 1 << 12
     };
+
+    constexpr ValueType operator|(const ValueType lhs, const ValueType rhs) {
+        return static_cast<ValueType>(static_cast<uint32_t>(lhs) | static_cast<uint32_t>(rhs));
+    }
 
     class Value : public RefCountBase {
     public:
@@ -47,7 +51,6 @@ namespace schemepp {
     };
 
     Ref<Value> constantBoolean(bool val);
-    bool toBoolean(const Ref<Value>& condition);
     Ref<Value> constantByteVector(std::vector<uint8_t> val);
     Ref<Value> constantCharacter(uint32_t val);
 
@@ -71,7 +74,7 @@ namespace schemepp {
             return ValueType::procedure;
         }
 
-        [[nodiscard]] virtual Result<Ref<Value>> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) = 0;
+        [[nodiscard]] virtual Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) = 0;
     };
 
     class Port : public Value {
@@ -117,5 +120,24 @@ namespace schemepp {
     BUILTIN_VALUE_DEFINE(CharacterValue, uint32_t, character);
 
 #undef BUILTIN_VALUE_DEFINE
+
+    [[noreturn]] void throwNoOperandError(EvaluateContext& ctx);
+    [[noreturn]] void throwWrongOperandCountError(EvaluateContext& ctx, uint32_t expect, size_t passed);
+    [[noreturn]] void throwMismatchedOperandTypeError(EvaluateContext& ctx, uint32_t idx, ValueType expect, ValueType passed);
+    [[noreturn]] void throwMismatchedOperandTypeError(ValueType expect, ValueType passed);
+    [[noreturn]] void throwDomainError();
+    [[noreturn]] void throwOutOfBoundError(EvaluateContext& ctx, Integer bound, Integer access);
+    [[noreturn]] void throwOutOfRangeError(EvaluateContext& ctx);
+    [[noreturn]] void throwDividedByZeroError();
+
+    Integer asInteger(const Ref<Value>& value);
+    using Number = std::variant<Integer, Real, Complex>;
+    Number asNumber(const Ref<Value>& value);
+    Ref<Value> constantNumber(const Number& value);
+    const std::string& asString(const Ref<Value>& value);
+    uint32_t asCharacter(const Ref<Value>& value);
+    bool asBoolean(const Ref<Value>& value);
+    const std::vector<Ref<Value>>& asVector(const Ref<Value>& value);
+    const std::vector<uint8_t>& asByteVector(const Ref<Value>& value);
 
 }  // namespace schemepp

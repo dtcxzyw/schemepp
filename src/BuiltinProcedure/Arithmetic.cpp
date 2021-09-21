@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 
+#include "Interface/Error.hpp"
 #include "Interface/Scope.hpp"
 #include "Interface/Value.hpp"
 #include <fmt/format.h>
@@ -9,14 +10,42 @@ namespace schemepp {
 #define PREFIX "Builtin.BaseLibrary.Arithmetic."
 
     // TODO: range check
-    static Real toRealUnsafe(const Ref<Value>& value) {
-        if(value->type() == ValueType::real)
-            return dynamic_cast<const RealValue*>(value.get())->value();
-        return static_cast<Real>(dynamic_cast<const IntegerValue*>(value.get())->value());
+    static Number liftUpImpl(const Integer val, const size_t idx) {
+        if(idx == 0)
+            return val;
+        if(idx == 1)
+            return static_cast<Real>(val);
+        if(idx == 2)
+            return static_cast<Complex>(static_cast<Real>(val));
+        throwInternalError();
     }
-
-    static Integer getIntegerUnsafe(const Ref<Value>& value) {
-        return dynamic_cast<const IntegerValue*>(value.get())->value();
+    static Number liftUpImpl(const Real val, const size_t idx) {
+        if(idx == 1)
+            return val;
+        if(idx == 2)
+            return static_cast<Complex>(val);
+        throwInternalError();
+    }
+    static Number liftUpImpl(const Complex val, const size_t idx) {
+        if(idx == 2)
+            return val;
+        throwInternalError();
+    }
+    static Number liftUp(const Number& x, const size_t idx) {
+        return std::visit([idx](auto val) { return liftUpImpl(val, idx); }, x);
+    }
+    template <template <typename T> class Operator, typename Ret = Number>
+    auto applyBinaryOp(Number a, Number b) -> Ret {
+        const auto dst = std::max(a.index(), b.index());
+        a = liftUp(a, dst);
+        b = liftUp(b, dst);
+        if(dst == 0)
+            return Operator<Integer>()(std::get<0>(a), std::get<0>(b));
+        if(dst == 1)
+            return Operator<Real>()(std::get<1>(a), std::get<1>(b));
+        if(dst == 2)
+            return Operator<Complex>()(std::get<2>(a), std::get<2>(b));
+        throwInternalError();
     }
 
     class Sum final : public Procedure {
@@ -24,40 +53,15 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "Sum";
         }
-        Result<Ref<Value>> apply(EvaluateContext&, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
             if(operands.empty())
-                return Result<Ref<Value>>{ Error{ "No operand" } };
+                throwNoOperandError(ctx);
 
-            bool useReal = false;
-            for(auto&& operand : operands) {
-                switch(operand->type()) {  // NOLINT(clang-diagnostic-switch-enum)
-                    case ValueType::integer:
-                        break;
-                    case ValueType::real:
-                        useReal = true;
-                        break;
-                    default:
-                        return Result<Ref<Value>>{ Error{ "Unsupported type" } };
-                }
-            }
+            Number res = asNumber(operands[0]);
+            for(size_t i = 1; i < operands.size(); ++i)
+                res = applyBinaryOp<std::plus>(res, asNumber(operands[i]));
 
-            if(useReal) {
-                Real res = 0.0;
-
-                for(auto&& operand : operands)
-                    res += toRealUnsafe(operand);
-
-                return Result{ constantReal(res) };
-            }
-
-            {
-                Integer res = 0;
-
-                for(auto&& operand : operands) {
-                    res += getIntegerUnsafe(operand);
-                }
-                return Result{ constantInteger(res) };
-            }
+            return constantNumber(res);
         }
     };
 
@@ -66,52 +70,16 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "Diff";
         }
-        Result<Ref<Value>> apply(EvaluateContext&, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
             if(operands.empty())
-                return Result<Ref<Value>>{ Error{ "No operand" } };
+                throwNoOperandError(ctx);
 
-            bool useReal = false;
-            for(auto&& operand : operands) {
-                switch(operand->type()) {  // NOLINT(clang-diagnostic-switch-enum)
-                    case ValueType::integer:
-                        break;
-                    case ValueType::real:
-                        useReal = true;
-                        break;
-                    default:
-                        return Result<Ref<Value>>{ Error{ "Unsupported type" } };
-                }
-            }
+            Number res = asNumber(operands[0]);
 
-            if(useReal) {
-                bool first = true;
-                Real res = 0.0;
+            for(size_t i = 1; i < operands.size(); ++i)
+                res = applyBinaryOp<std::minus>(res, asNumber(operands[i]));
 
-                for(auto&& operand : operands)
-                    if(first) {
-                        res += toRealUnsafe(operand);
-                        first = false;
-                    } else {
-                        res -= toRealUnsafe(operand);
-                    }
-
-                return Result{ constantReal(res) };
-            }
-
-            {
-                bool first = true;
-                Integer res = 0;
-
-                for(auto&& operand : operands)
-                    if(first) {
-                        res += getIntegerUnsafe(operand);
-                        first = false;
-                    } else {
-                        res -= getIntegerUnsafe(operand);
-                    }
-
-                return Result{ constantInteger(res) };
-            }
+            return constantNumber(res);
         }
     };
 
@@ -120,40 +88,33 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "Mul";
         }
-        Result<Ref<Value>> apply(EvaluateContext&, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
             if(operands.empty())
-                return Result<Ref<Value>>{ Error{ "No operand" } };
+                throwNoOperandError(ctx);
 
-            bool useReal = false;
-            for(auto&& operand : operands) {
-                switch(operand->type()) {  // NOLINT(clang-diagnostic-switch-enum)
-                    case ValueType::integer:
-                        break;
-                    case ValueType::real:
-                        useReal = true;
-                        break;
-                    default:
-                        return Result<Ref<Value>>{ Error{ "Unsupported type" } };
-                }
-            }
+            Number res = asNumber(operands[0]);
+            for(size_t i = 1; i < operands.size(); ++i)
+                res = applyBinaryOp<std::multiplies>(res, asNumber(operands[i]));
 
-            if(useReal) {
-                Real res = 1.0;
+            return constantNumber(res);
+        }
+    };
 
-                for(auto&& operand : operands)
-                    res *= toRealUnsafe(operand);
+    template <typename T>
+    struct Divide final {
+        T operator()(T lhs, T rhs) {
+            return lhs / rhs;
+        }
+    };
 
-                return Result{ constantReal(res) };
-            }
-
-            {
-                Integer res = 1;
-
-                for(auto&& operand : operands) {
-                    res *= getIntegerUnsafe(operand);
-                }
-                return Result{ constantInteger(res) };
-            }
+    template <>
+    struct Divide<Integer> final {
+        Number operator()(const Integer lhs, const Integer rhs) const {
+            if(rhs == 0)
+                throwDividedByZeroError();
+            if(lhs % rhs == 0)
+                return lhs / rhs;
+            return static_cast<Real>(lhs) / static_cast<Real>(rhs);
         }
     };
 
@@ -162,53 +123,50 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "Div";
         }
-        Result<Ref<Value>> apply(EvaluateContext&, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
             if(operands.size() != 2)
-                return Result<Ref<Value>>{ Error{ fmt::format("Wrong operands count. Expect 2, but got {}.", operands.size()) } };
+                throwWrongOperandCountError(ctx, 1 << 2, operands.size());
 
-            bool useReal = false;
-            for(auto&& operand : operands) {
-                switch(operand->type()) {  // NOLINT(clang-diagnostic-switch-enum)
-                    case ValueType::integer:
-                        break;
-                    case ValueType::real:
-                        useReal = true;
-                        break;
-                    default:
-                        return Result<Ref<Value>>{ Error{ "Unsupported type" } };
-                }
-            }
-
-            // TODO: handle divided by zero
-
-            if(useReal)
-                return Result{ constantReal(toRealUnsafe(operands[0]) / toRealUnsafe(operands[1])) };
-
-            const auto lhs = getIntegerUnsafe(operands[0]);
-            const auto rhs = getIntegerUnsafe(operands[1]);
-
-            if(lhs % rhs == 0)
-                return Result{ constantInteger(lhs / rhs) };
-            return Result{ constantReal(static_cast<Real>(lhs) / static_cast<Real>(rhs)) };
+            return constantNumber(applyBinaryOp<Divide>(asNumber(operands[0]), asNumber(operands[1])));
         }
     };
 
-#define BUILTIN_COMPARER(NAME, OP)                   \
-    template <typename T>                            \
-    struct NAME final {                              \
-        static constexpr auto name() noexcept {      \
-            return PREFIX #NAME;                     \
-        }                                            \
-        static bool compare(T lhs, T rhs) noexcept { \
-            return lhs OP rhs;                       \
-        }                                            \
+#define BUILTIN_COMPARER(NAME, OP)                                 \
+    template <typename T>                                          \
+    struct NAME final {                                            \
+        static constexpr auto name() noexcept {                    \
+            return PREFIX #NAME;                                   \
+        }                                                          \
+        bool operator()(T lhs, T rhs) const noexcept {             \
+            return lhs OP rhs;                                     \
+        }                                                          \
+    };                                                             \
+                                                                   \
+    template <>                                                    \
+    struct NAME<Complex> final {                                   \
+        static constexpr auto name() noexcept {                    \
+            return PREFIX #NAME;                                   \
+        }                                                          \
+        bool operator()(Complex lhs, Complex rhs) const noexcept { \
+            throwInternalError();                                  \
+            return false;                                          \
+        }                                                          \
     }
 
     BUILTIN_COMPARER(LessThan, <);
     BUILTIN_COMPARER(GreaterThan, >);
     BUILTIN_COMPARER(LessEq, <=);
     BUILTIN_COMPARER(GreaterEq, >=);
-    BUILTIN_COMPARER(Equal, ==);  // NOLINT(clang-diagnostic-float-equal)
+
+    template <typename T>
+    struct Equal final {
+        static constexpr auto name() noexcept {
+            return PREFIX "Equal";
+        }
+        bool operator()(T lhs, T rhs) const noexcept {
+            return lhs == rhs;
+        }
+    };
 
 #undef BUILTIN_COMPARER
 
@@ -218,39 +176,21 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << Comparer<Integer>::name();
         }
-        Result<Ref<Value>> apply(EvaluateContext&, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
             if(operands.empty())
-                return Result<Ref<Value>>{ Error{ "No operand" } };
+                throwNoOperandError(ctx);
 
-            bool useReal = false;
-            for(auto&& operand : operands) {
-                switch(operand->type()) {  // NOLINT(clang-diagnostic-switch-enum)
-                    case ValueType::integer:
-                        break;
-                    case ValueType::real:
-                        useReal = true;
-                        break;
-                    default:
-                        return Result<Ref<Value>>{ Error{ "Unsupported type" } };
-                }
+            Number last = asNumber(operands[0]);
+            for(size_t i = 1; i < operands.size(); ++i) {
+                Number cur = asNumber(operands[i]);
+
+                if(!applyBinaryOp<Comparer, bool>(last, cur))
+                    return constantBoolean(false);
+
+                last = cur;
             }
 
-            bool res = true;
-            if(useReal) {
-                for(size_t i = 1; i < operands.size(); ++i)
-                    if(!Comparer<Real>::compare(toRealUnsafe(operands[i - 1]), toRealUnsafe(operands[i]))) {
-                        res = false;
-                        break;
-                    }
-            } else {
-                for(size_t i = 1; i < operands.size(); ++i)
-                    if(!Comparer<Integer>::compare(getIntegerUnsafe(operands[i - 1]), getIntegerUnsafe(operands[i]))) {
-                        res = false;
-                        break;
-                    }
-            }
-
-            return Result{ constantBoolean(res) };
+            return constantBoolean(true);
         }
     };
 
@@ -259,11 +199,11 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "Not";
         }
-        Result<Ref<Value>> apply(EvaluateContext&, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
             if(operands.size() != 1)
-                return Result<Ref<Value>>{ Error{ fmt::format("Wrong operands count. Expect 1, but got {}.", operands.size()) } };
+                throwWrongOperandCountError(ctx, 1 << 1, operands.size());
 
-            return Result{ constantBoolean(!toBoolean(operands[0])) };
+            return constantBoolean(!asBoolean(operands[0]));
         }
     };
 
@@ -272,57 +212,16 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "Equal";
         }
-        Result<Ref<Value>> apply(EvaluateContext&, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
             if(operands.empty())
-                return Result<Ref<Value>>{ Error{ "No operand" } };
+                throwNoOperandError(ctx);
 
-            const auto type = operands.front()->type();
             for(size_t i = 1; i < operands.size(); ++i) {
                 if(!operands[i]->equal(operands[0]))
-                    return Result{ constantBoolean(false) };
+                    return constantBoolean(false);
             }
 
-            return Result{ constantBoolean(true) };
-        }
-    };
-
-    class Exponent final : public Procedure {
-    public:
-        void printValue(std::ostream& stream) const override {
-            stream << PREFIX "Exponent";
-        }
-        Result<Ref<Value>> apply(EvaluateContext&, const std::vector<Ref<Value>>& operands) override {
-            if(operands.size() != 2)
-                return Result<Ref<Value>>{ Error{ fmt::format("Wrong operands count. Expect 2, but got {}.", operands.size()) } };
-
-            bool useReal = false;
-            for(auto&& operand : operands) {
-                switch(operand->type()) {  // NOLINT(clang-diagnostic-switch-enum)
-                    case ValueType::integer:
-                        break;
-                    case ValueType::real:
-                        useReal = true;
-                        break;
-                    default:
-                        return Result<Ref<Value>>{ Error{ "Unsupported type" } };
-                }
-            }
-
-            // TODO: handle domain
-
-            if(useReal)
-                return Result{ constantReal(std::pow(toRealUnsafe(operands[0]), toRealUnsafe(operands[1]))) };
-
-            Integer x = getIntegerUnsafe(operands[0]), y = getIntegerUnsafe(operands[1]), ans = 1;
-
-            while(y) {
-                if(y & 1)
-                    ans *= x;
-                x *= x;
-                y >>= 1;
-            }
-
-            return Result{ constantInteger(ans) };
+            return constantBoolean(true);
         }
     };
 
@@ -342,8 +241,6 @@ namespace schemepp {
         ADD_BUILTIN_PROCEDURE(eqv?, GeneticEqual);
 
         ADD_BUILTIN_PROCEDURE(not, Not);
-
-        ADD_BUILTIN_PROCEDURE(expt, Exponent);
 
 #undef ADD_BUILTIN_PROCEDURE
     }

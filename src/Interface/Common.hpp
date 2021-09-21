@@ -119,8 +119,4 @@ namespace schemepp {
         return Ref<T>{ ptr };
     }
 
-    class NotImplemented final : public std::exception {
-    public:
-        NotImplemented() : exception{ "Not implemented feature" } {}
-    };
 }  // namespace schemepp

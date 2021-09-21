@@ -14,6 +14,8 @@ namespace schemepp {
     void initializeBuiltinContainerProcedure(Scope& scope);
     // string<?
     void initializeBuiltinStringProcedure(Scope& scope);
+    // expt
+    void initializeBuiltinMathProcedure(Scope& scope);
     // File Library
     // Load Library
     // Process-Context Library
