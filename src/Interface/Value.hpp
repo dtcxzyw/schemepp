@@ -34,7 +34,8 @@ namespace schemepp {
         procedure = 1 << 10,
         inputPort = 1 << 11,
         outputPort = 1 << 12,
-        symbol = 1 << 13
+        symbol = 1 << 13,
+        unspecified = 1 << 14
     };
 
     constexpr ValueType operator|(const ValueType lhs, const ValueType rhs) {
@@ -64,6 +65,8 @@ namespace schemepp {
 
     Ref<Value> constantString(std::string val);
 
+    using Pair = std::pair<Ref<Value>, Ref<Value>>;
+    Ref<Value> makePair(Ref<Value> car, Ref<Value> cdr);
     Ref<Value> makeVector(std::vector<Ref<Value>> values);
     Ref<Value> makeList(std::list<Ref<Value>> values);
     Ref<Value> makeSymbol(std::string val);
@@ -95,6 +98,13 @@ namespace schemepp {
         [[nodiscard]] virtual std::ostream& output() const = 0;
     };
 
+    class Unspecified final : public Value {
+    public:
+        ValueType type() const noexcept override;
+        void printValue(std::ostream& stream) const override;
+        static Ref<Value> value() noexcept;
+    };
+
 #define BUILTIN_VALUE_DEFINE(NAME, NATIVE, TYPE)                                   \
     class NAME : public Value {                                                    \
     public:                                                                        \
@@ -122,10 +132,11 @@ namespace schemepp {
     BUILTIN_VALUE_DEFINE(RealValue, Real, real);
     BUILTIN_VALUE_DEFINE(ComplexValue, Complex, complex);
     BUILTIN_VALUE_DEFINE(StringValue, std::string, string);
-    BUILTIN_VALUE_DEFINE(VectorValue, std::vector<Ref<Value>>, string);
-    BUILTIN_VALUE_DEFINE(ListValue, std::list<Ref<Value>>, string);
+    BUILTIN_VALUE_DEFINE(VectorValue, std::vector<Ref<Value>>, vector);
+    BUILTIN_VALUE_DEFINE(ListValue, std::list<Ref<Value>>, list);
     BUILTIN_VALUE_DEFINE(ByteVectorValue, std::vector<uint8_t>, byteVector);
     BUILTIN_VALUE_DEFINE(CharacterValue, uint32_t, character);
+    BUILTIN_VALUE_DEFINE(PairValue, Pair, pair);
 
 #undef BUILTIN_VALUE_DEFINE
 
@@ -134,7 +145,7 @@ namespace schemepp {
     [[noreturn]] void throwMismatchedOperandTypeError(EvaluateContext& ctx, uint32_t idx, ValueType expect, ValueType passed);
     [[noreturn]] void throwMismatchedOperandTypeError(ValueType expect, ValueType passed);
     [[noreturn]] void throwDomainError();
-    [[noreturn]] void throwOutOfBoundError(EvaluateContext& ctx, Integer bound, Integer access);
+    [[noreturn]] void throwOutOfBoundError(EvaluateContext& ctx, size_t bound, Integer access);
     [[noreturn]] void throwOutOfRangeError(EvaluateContext& ctx);
     [[noreturn]] void throwDividedByZeroError();
 
@@ -148,8 +159,10 @@ namespace schemepp {
     uint32_t asCharacter(const Ref<Value>& value);
     bool asBoolean(const Ref<Value>& value);
     const std::vector<Ref<Value>>& asVector(const Ref<Value>& value);
+    const std::list<Ref<Value>>& asList(const Ref<Value>& value);
     const std::vector<uint8_t>& asByteVector(const Ref<Value>& value);
     std::istream& asInputPort(const Ref<Value>& value);
     std::ostream& asOutputPort(const Ref<Value>& value);
+    const Pair& asPair(const Ref<Value>& value);
 
 }  // namespace schemepp

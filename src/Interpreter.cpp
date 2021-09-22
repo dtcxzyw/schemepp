@@ -62,6 +62,7 @@ namespace schemepp {
             initializeBuiltinComplexProcedure(mContext.scope);
             initializeBuiltinCharProcedure(mContext.scope);
             initializeBuiltinProcessContextProcedure(mContext.scope);
+            initializeBuiltinContainerProcedure(mContext.scope);
         }
 
         [[nodiscard]] std::string execute(const std::string_view statement) override {

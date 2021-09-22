@@ -28,7 +28,7 @@ namespace schemepp {
     [[noreturn]] void throwDomainError() {
         throw Error{ "out of domain" };
     }
-    [[noreturn]] void throwOutOfBoundError(EvaluateContext& ctx, Integer bound, Integer access) {
+    [[noreturn]] void throwOutOfBoundError(EvaluateContext& ctx, size_t bound, Integer access) {
         throw Error{ "out of bound" };
     }
     [[noreturn]] void throwOutOfRangeError(EvaluateContext& ctx) {
@@ -36,5 +36,16 @@ namespace schemepp {
     }
     [[noreturn]] void throwDividedByZeroError() {
         throw Error{ "divided by zero" };
+    }
+    ValueType Unspecified::type() const noexcept {
+        return ValueType::unspecified;
+    }
+    void Unspecified::printValue(std::ostream& stream) const {
+        stream << "unspecified";
+    }
+
+    Ref<Value> Unspecified::value() noexcept {
+        static Ref<Value> val = makeRefCount<Unspecified>();
+        return val;
     }
 }  // namespace schemepp

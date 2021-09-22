@@ -74,7 +74,10 @@ namespace schemepp {
             auto env = _environ;
             std::list<Ref<Value>> res;
             while(*env) {
-                res.push_back(constantString(*env));
+                std::string_view kv{ *env };
+                const auto split = kv.find_first_of('=');
+                res.push_back(makeList(
+                    { constantString(std::string{ kv.substr(0, split) }), constantString(std::string{ kv.substr(split + 1) }) }));
                 ++env;
             }
             return makeList(std::move(res));

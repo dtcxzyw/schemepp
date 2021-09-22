@@ -9,12 +9,13 @@ namespace schemepp {
     public:
         explicit VectorImpl(std::vector<Ref<Value>> values) : mValues{ std::move(values) } {}
         void printValue(std::ostream& stream) const override {
-            stream << "[ ";
+            stream << "#(";
             for(auto&& child : mValues) {
                 child->printValue(stream);
-                stream << " ";
+                if(&child != &mValues.back())
+                    stream << ' ';
             }
-            stream << "]";
+            stream << ')';
         }
         const std::vector<Ref<Value>>& ref() const noexcept override {
             return mValues;
