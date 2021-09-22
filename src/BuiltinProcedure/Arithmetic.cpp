@@ -7,7 +7,7 @@
 
 namespace schemepp {
     // TODO: rational
-#define PREFIX "Builtin.BaseLibrary.Arithmetic."
+#define PREFIX "<builtin procedure> Builtin.BaseLibrary.Arithmetic."
 
     // TODO: range check
     static Number liftUpImpl(const Integer val, const size_t idx) {

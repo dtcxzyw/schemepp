@@ -6,7 +6,7 @@
 
 namespace schemepp {
 
-#define PREFIX "Builtin.BaseLibrary.RTTI."
+#define PREFIX "<builtin procedure> Builtin.BaseLibrary.RTTI."
 
     class RTTIBase : public Procedure {
     public:
@@ -41,6 +41,8 @@ namespace schemepp {
     BUILTIN_RTTI_DEFINE(IsSymbol, symbol);
     BUILTIN_RTTI_DEFINE(IsList, list);
     BUILTIN_RTTI_DEFINE(IsPair, pair);
+    BUILTIN_RTTI_DEFINE(IsInputPort, inputPort);
+    BUILTIN_RTTI_DEFINE(IsOutputPort, outputPort);
 
 #undef BUILTIN_RTTI_DEFINE
 
@@ -80,6 +82,8 @@ namespace schemepp {
         ADD_BUILTIN_PROCEDURE("symbol?", IsSymbol);
         ADD_BUILTIN_PROCEDURE("list?", IsList);
         ADD_BUILTIN_PROCEDURE("pair?", IsPair);
+        ADD_BUILTIN_PROCEDURE("input-port?", IsInputPort);
+        ADD_BUILTIN_PROCEDURE("output-port?", IsOutputPort);
 
 #undef ADD_BUILTIN_PROCEDURE
     }

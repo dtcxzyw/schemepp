@@ -5,7 +5,7 @@
 #include <fmt/format.h>
 
 namespace schemepp {
-#define PREFIX "Builtin.BaseLibrary.Math."
+#define PREFIX "<builtin procedure> Builtin.BaseLibrary.Math."
 
     class Exponent final : public Procedure {
         template <typename T>

@@ -5,7 +5,6 @@
 #include "Value.hpp"
 #include <complex>
 #include <list>
-#include <optional>
 #include <variant>
 #include <vector>
 
@@ -33,8 +32,9 @@ namespace schemepp {
         string = 1 << 8,
         vector = 1 << 9,
         procedure = 1 << 10,
-        port = 1 << 11,
-        symbol = 1 << 12
+        inputPort = 1 << 11,
+        outputPort = 1 << 12,
+        symbol = 1 << 13
     };
 
     constexpr ValueType operator|(const ValueType lhs, const ValueType rhs) {
@@ -77,14 +77,22 @@ namespace schemepp {
         [[nodiscard]] virtual Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) = 0;
     };
 
-    class Port : public Value {
+    class InputPort : public Value {
     public:
         [[nodiscard]] ValueType type() const noexcept final {
-            return ValueType::port;
+            return ValueType::inputPort;
         }
 
-        [[nodiscard]] virtual std::optional<std::reference_wrapper<std::istream>> input() const = 0;
-        [[nodiscard]] virtual std::optional<std::reference_wrapper<std::ostream>> output() const = 0;
+        [[nodiscard]] virtual std::istream& input() const = 0;
+    };
+
+    class OutputPort : public Value {
+    public:
+        [[nodiscard]] ValueType type() const noexcept final {
+            return ValueType::inputPort;
+        }
+
+        [[nodiscard]] virtual std::ostream& output() const = 0;
     };
 
 #define BUILTIN_VALUE_DEFINE(NAME, NATIVE, TYPE)                                   \
@@ -131,6 +139,8 @@ namespace schemepp {
     [[noreturn]] void throwDividedByZeroError();
 
     Integer asInteger(const Ref<Value>& value);
+    Real asReal(const Ref<Value>& value);
+    Complex asComplex(const Ref<Value>& value);
     using Number = std::variant<Integer, Real, Complex>;
     Number asNumber(const Ref<Value>& value);
     Ref<Value> constantNumber(const Number& value);
@@ -139,5 +149,7 @@ namespace schemepp {
     bool asBoolean(const Ref<Value>& value);
     const std::vector<Ref<Value>>& asVector(const Ref<Value>& value);
     const std::vector<uint8_t>& asByteVector(const Ref<Value>& value);
+    std::istream& asInputPort(const Ref<Value>& value);
+    std::ostream& asOutputPort(const Ref<Value>& value);
 
 }  // namespace schemepp

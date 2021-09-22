@@ -24,7 +24,7 @@ namespace schemepp {
 
     Integer asInteger(const Ref<Value>& value) {
         if(value->type() == ValueType::integer) {
-            return dynamic_cast<const IntegerImpl*>(value.get())->ref();
+            return dynamic_cast<const IntegerImpl*>(value.get())->value();
         }
         throwMismatchedOperandTypeError(ValueType::integer, value->type());
     }
@@ -44,6 +44,13 @@ namespace schemepp {
 
     Ref<Value> constantReal(const Real val) {
         return makeRefCount<RealImpl>(val);
+    }
+
+    Real asReal(const Ref<Value>& value) {
+        if(value->type() == ValueType::real) {
+            return dynamic_cast<const RealImpl*>(value.get())->value();
+        }
+        throwMismatchedOperandTypeError(ValueType::real, value->type());
     }
 
     class ComplexImpl final : public ComplexValue {
@@ -73,16 +80,22 @@ namespace schemepp {
     Ref<Value> constantComplex(const Complex val) {
         return makeRefCount<ComplexImpl>(val);
     }
+    Complex asComplex(const Ref<Value>& value) {
+        if(value->type() == ValueType::complex) {
+            return dynamic_cast<const ComplexImpl*>(value.get())->value();
+        }
+        throwMismatchedOperandTypeError(ValueType::complex, value->type());
+    }
 
     Number asNumber(const Ref<Value>& value) {
         if(value->type() == ValueType::integer) {
-            return dynamic_cast<const IntegerImpl*>(value.get())->ref();
+            return dynamic_cast<const IntegerImpl*>(value.get())->value();
         }
         if(value->type() == ValueType::real) {
-            return dynamic_cast<const RealImpl*>(value.get())->ref();
+            return dynamic_cast<const RealImpl*>(value.get())->value();
         }
         if(value->type() == ValueType::complex) {
-            return dynamic_cast<const ComplexImpl*>(value.get())->ref();
+            return dynamic_cast<const ComplexImpl*>(value.get())->value();
         }
         throwMismatchedOperandTypeError(ValueType::integer | ValueType::real | ValueType::complex, value->type());
     }

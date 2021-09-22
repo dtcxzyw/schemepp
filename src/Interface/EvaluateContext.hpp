@@ -14,8 +14,8 @@ namespace schemepp {
 
     struct EvaluateContext final {
         Scope scope;
-        Ref<Port> currentInputPort;
-        Ref<Port> currentOutputPort;
+        Ref<InputPort> currentInputPort;
+        Ref<OutputPort> currentOutputPort;
         GlobalSettings settings;
     };
 

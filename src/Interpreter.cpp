@@ -16,29 +16,23 @@ namespace schemepp {
         std::quick_exit(EXIT_FAILURE);
     }
 
-    class StandardInput final : public Port {
+    class StandardInput final : public InputPort {
     public:
         void printValue(std::ostream& stream) const override {
             stream << "Builtin.StandardInput";
         }
-        std::optional<std::reference_wrapper<std::ostream>> output() const override {
-            return std::nullopt;
-        }
-        std::optional<std::reference_wrapper<std::istream>> input() const override {
-            return std::ref(std::cin);
+        std::istream& input() const override {
+            return std::cin;
         }
     };
 
-    class StandardOutput final : public Port {
+    class StandardOutput final : public OutputPort {
     public:
         void printValue(std::ostream& stream) const override {
             stream << "Builtin.StandardOutput";
         }
-        std::optional<std::reference_wrapper<std::ostream>> output() const override {
-            return std::ref(std::cout);
-        }
-        std::optional<std::reference_wrapper<std::istream>> input() const override {
-            return std::nullopt;
+        std::ostream& output() const override {
+            return std::cout;
         }
     };
 
@@ -64,6 +58,10 @@ namespace schemepp {
             initializeBuiltinWriteProcedure(mContext.scope);
             initializeBuiltinStringProcedure(mContext.scope);
             initializeBuiltinMathProcedure(mContext.scope);
+            initializeBuiltinFileProcedure(mContext.scope);
+            initializeBuiltinComplexProcedure(mContext.scope);
+            initializeBuiltinCharProcedure(mContext.scope);
+            initializeBuiltinProcessContextProcedure(mContext.scope);
         }
 
         [[nodiscard]] std::string execute(const std::string_view statement) override {
