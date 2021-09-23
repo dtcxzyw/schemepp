@@ -11,7 +11,7 @@ namespace schemepp {
     class RTTIBase : public Procedure {
     public:
         virtual bool checkType(ValueType type) const noexcept = 0;
-        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) final {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const final {
             if(operands.size() != 1)
                 throwWrongOperandCountError(ctx, 1 << 1, operands.size());
 

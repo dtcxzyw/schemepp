@@ -16,6 +16,7 @@
 // TODO: split to different implementations
 
 namespace schemepp {
+    using NodePair = std::pair<Ref<Node>, Ref<Node>>;
 
     class Constant final : public Node {
         Ref<Value> mVal;
@@ -38,7 +39,7 @@ namespace schemepp {
     public:
         explicit SymbolReference(std::string symbol) : mSymbol{ std::move(symbol) } {}
         Ref<Value> evaluate(EvaluateContext& context) const override {
-            return context.scope.lookup(mSymbol);
+            return context.scope.get().lookup(mSymbol);
         }
         void printAST(std::ostream& stream) const override {
             stream << "(symbol " << mSymbol << ')';
@@ -224,13 +225,21 @@ namespace schemepp {
         Ref<Value> evaluate(EvaluateContext& context) const override {
             auto val = mExpr->evaluate(context);
             if(mAssignment)
-                return context.scope.assign(mSymbol, std::move(val));
-            return context.scope.insert(mSymbol, std::move(val));
+                return context.scope.get().assign(mSymbol, std::move(val));
+            return context.scope.get().insert(mSymbol, std::move(val));
         }
         void printAST(std::ostream& stream) const override {
             stream << "(define " << mSymbol << ' ';
             mExpr->printAST(stream);
             stream << ')';
+        }
+    };
+
+    struct ScopeGuard final {  // NOLINT(cppcoreguidelines-special-member-functions)
+        EvaluateContext& ctx;
+        std::reference_wrapper<Scope> oldScope;
+        ~ScopeGuard() {
+            ctx.scope = oldScope;
         }
     };
 
@@ -241,7 +250,7 @@ namespace schemepp {
     public:
         explicit LambdaProcedure(std::vector<std::string> symbols, Ref<Node> body)
             : mSymbols{ std::move(symbols) }, mBody{ std::move(body) } {
-            if(std::unordered_set<std::string> set{ mSymbols.cbegin(), mSymbols.cend() }; set.size() != mSymbols.size())
+            if(const std::unordered_set<std::string> set{ mSymbols.cbegin(), mSymbols.cend() }; set.size() != mSymbols.size())
                 throw Error{ "Redefinition of formals" };
         }
         void printValue(std::ostream& stream) const override {
@@ -251,11 +260,149 @@ namespace schemepp {
             mBody->printAST(stream);
             stream << ')';
         }
-        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
             if(mSymbols.size() != operands.size())
                 throwWrongOperandCountError(ctx, 1 << mSymbols.size(), operands.size());
-            auto guard = ctx.scope.bind(mSymbols, operands);
+            Scope lambdaScope{ &ctx.scope.get() };
+            for(size_t i = 0; i < mSymbols.size(); ++i)
+                lambdaScope.insert(mSymbols[i], operands[i]);
+            lambdaScope.disableLookupBarrier();
+            ScopeGuard guard{ ctx, ctx.scope };
+            ctx.scope = std::ref(lambdaScope);
             return mBody->evaluate(ctx);
+        }
+    };
+
+    class LetNode final : public Node {
+        std::vector<Ref<Node>> mBindings;
+        Ref<Node> mBody;
+        bool mBarrier;
+
+    public:
+        LetNode(std::vector<Ref<Node>> bindings, Ref<Node> body, bool barrier)
+            : mBindings{ std::move(bindings) }, mBody{ std::move(body) }, mBarrier{ barrier } {}
+        void printAST(std::ostream& stream) const override {
+            stream << "(let";
+            if(!mBarrier)
+                stream << '*';
+            for(auto& binding : mBindings) {
+                stream << ' ';
+                binding->printAST(stream);
+            }
+            stream << ' ';
+            mBody->printAST(stream);
+            stream << ')';
+        }
+        Ref<Value> evaluate(EvaluateContext& context) const override {
+            Scope letScope{ &context.scope.get() };
+            ScopeGuard guard{ context, context.scope };
+            context.scope = std::ref(letScope);
+            if(!mBarrier)
+                letScope.disableLookupBarrier();
+
+            for(auto& binding : mBindings) {
+                binding->evaluate(context);
+            }
+
+            letScope.disableLookupBarrier();
+            return mBody->evaluate(context);
+        }
+    };
+
+    class CondNode final : public Node {
+        std::vector<NodePair> mConditions;
+        Ref<Node> mElsePart;
+
+    public:
+        CondNode(std::vector<NodePair> conditions, Ref<Node> elsePart)
+            : mConditions{ std::move(conditions) }, mElsePart{ std::move(elsePart) } {}
+        void printAST(std::ostream& stream) const override {
+            stream << "(cond";
+            for(auto& [cond, seq] : mConditions) {
+                stream << " (";
+                cond->printAST(stream);
+                stream << ' ';
+                seq->printAST(stream);
+                stream << ')';
+            }
+            if(mElsePart) {
+                stream << " (else ";
+                mElsePart->printAST(stream);
+                stream << ')';
+            }
+            stream << ')';
+        }
+        Ref<Value> evaluate(EvaluateContext& context) const override {
+            for(auto& [cond, seq] : mConditions) {
+                if(asBoolean(cond->evaluate(context))) {
+                    return seq->evaluate(context);
+                }
+            }
+            if(mElsePart)
+                return mElsePart->evaluate(context);
+            return constantBoolean(false);
+        }
+    };
+
+    template <bool Expect>
+    class WhenNode final : public Node {
+        Ref<Node> mCondition;
+        Ref<Node> mSequence;
+
+    public:
+        explicit WhenNode(Ref<Node> condition, Ref<Node> sequence)
+            : mCondition{ std::move(condition) }, mSequence{ std::move(sequence) } {}
+        void printAST(std::ostream& stream) const override {
+            stream << (Expect ? "(when" : "(unless");
+            mCondition->printAST(stream);
+            stream << ' ';
+            mSequence->printAST(stream);
+            stream << ')';
+        }
+        Ref<Value> evaluate(EvaluateContext& context) const override {
+            if(asBoolean(mCondition->evaluate(context)) == Expect) {
+                return mSequence->evaluate(context);
+            }
+            return constantBoolean(!Expect);
+        }
+    };
+
+    class CaseNode final : public Node {
+        Ref<Node> mExpression;
+        std::vector<NodePair> mPatterns;
+        Ref<Node> mElsePart;
+
+    public:
+        explicit CaseNode(Ref<Node> expression, std::vector<NodePair> patterns, Ref<Node> elsePart)
+            : mExpression{ std::move(expression) }, mPatterns{ std::move(patterns) }, mElsePart{ std::move(elsePart) } {}
+        void printAST(std::ostream& stream) const override {
+            stream << "(case";
+            mExpression->printAST(stream);
+            for(auto& [k, v] : mPatterns) {
+                stream << " (";
+                k->printAST(stream);
+                stream << ' ';
+                v->printAST(stream);
+                stream << ')';
+            }
+            if(mElsePart) {
+                stream << " (else ";
+                mElsePart->printAST(stream);
+                stream << ')';
+            }
+            stream << ')';
+        }
+        Ref<Value> evaluate(EvaluateContext& context) const override {
+            const auto expr = mExpression->evaluate(context);
+            for(auto& [k, v] : mPatterns) {
+                if(const auto pattern = k->evaluate(context); pattern->equal(expr)) {
+                    return v->evaluate(context);
+                }
+            }
+            if(mElsePart) {
+                return mElsePart->evaluate(context);
+            }
+            return constantBoolean(false);
         }
     };
 
@@ -328,7 +475,7 @@ namespace schemepp {
         DEFINE_X3_RULE(conditional);
         DEFINE_X3_RULE(assignment);
         DEFINE_X3_RULE(derived);
-        DEFINE_X3_RULE(condClause);
+        DEFINE_X3_RULE_TYPE(condClause, NodePair);
         DEFINE_X3_RULE(bindingSpec);
         DEFINE_X3_RULE(mvBindingSpec);
         DEFINE_X3_RULE(iterSpec);
@@ -340,7 +487,7 @@ namespace schemepp {
         DEFINE_X3_RULE(include);
         DEFINE_X3_RULE(datum);
         DEFINE_X3_RULE(definition);
-        DEFINE_X3_RULE(caseClause);
+        DEFINE_X3_RULE_TYPE(caseClause, NodePair);
         DEFINE_X3_RULE(quasiQuotation);
         DEFINE_X3_RULE(transformerSpec);
         DEFINE_X3_RULE(simpleDatum);
@@ -365,10 +512,18 @@ namespace schemepp {
         DEFINE_X3_RULE(real);
         DEFINE_X3_RULE(characterGraph);
         DEFINE_X3_RULE(characterUInt);
+        DEFINE_X3_RULE(cond1);
+        DEFINE_X3_RULE(cond2);
+        DEFINE_X3_RULE(case1);
+        DEFINE_X3_RULE(case2);
+        DEFINE_X3_RULE(case3);
         DEFINE_X3_RULE(logicOr);
         DEFINE_X3_RULE(logicAnd);
+        DEFINE_X3_RULE(when);
+        DEFINE_X3_RULE(unless);
         DEFINE_X3_RULE(let1);
         DEFINE_X3_RULE(let2);
+        DEFINE_X3_RULE(let3);
         DEFINE_X3_RULE(begin);
         DEFINE_X3_RULE(doStatement);
         DEFINE_X3_RULE(iterSpec1);
@@ -379,11 +534,11 @@ namespace schemepp {
         DEFINE_X3_RULE(definition4);
         DEFINE_X3_RULE(definition5);
         DEFINE_X3_RULE(definition6);
-        DEFINE_X3_RULE(condClause1);
-        DEFINE_X3_RULE(condClause2);
-        DEFINE_X3_RULE(condClause3);
-        DEFINE_X3_RULE(caseClause1);
-        DEFINE_X3_RULE(caseClause2);
+        DEFINE_X3_RULE_TYPE(condClause1, NodePair);
+        DEFINE_X3_RULE_TYPE(condClause2, NodePair);
+        DEFINE_X3_RULE_TYPE(condClause3, NodePair);
+        DEFINE_X3_RULE_TYPE(caseClause1, NodePair);
+        DEFINE_X3_RULE_TYPE(caseClause2, NodePair);
         DEFINE_X3_RULE(list1);
         DEFINE_X3_RULE(list2);
         DEFINE_X3_RULE(complex);
@@ -638,20 +793,71 @@ namespace schemepp {
             x3::_val(ctx) = { makeRefCount<Definition>(boost::fusion::at_c<0>(attr), boost::fusion::at_c<1>(attr).root, true) };
         };
         const auto assignment_def = ('(' >> x3::lit("set!") >> identifierPattern >> expr >> ')')[buildAssignment];
+        constexpr auto buildCond1 = [](auto& ctx) {
+            auto& attr = x3::_attr(ctx);
+            x3::_val(ctx) = { makeRefCount<CondNode>(attr, Ref<Node>{ nullptr }) };
+        };
+        const auto cond1_def = ('(' >> x3::lit("cond") >> (+condClause) >> ')')[buildCond1];
+        constexpr auto buildCond2 = [](auto& ctx) {
+            auto& attr = x3::_attr(ctx);
+            x3::_val(ctx) = { makeRefCount<CondNode>(boost::fusion::at_c<0>(attr), boost::fusion::at_c<1>(attr).root) };
+        };
+        const auto cond2_def =
+            ('(' >> x3::lit("cond") >> (*condClause) >> '(' >> x3::lit("else") >> sequence >> ')' >> ')')[buildCond2];
+        constexpr auto buildCase1 = [](auto& ctx) {
+            auto& attr = x3::_attr(ctx);
+            x3::_val(ctx) = { makeRefCount<CaseNode>(boost::fusion::at_c<0>(attr).root, boost::fusion::at_c<1>(attr),
+                                                     Ref<Node>{ nullptr }) };
+        };
+        const auto case1_def = ('(' >> x3::lit("case") >> expr >> (+caseClause) >> ')')[buildCase1];
+        constexpr auto buildCase2 = [](auto& ctx) {
+            auto& attr = x3::_attr(ctx);
+            x3::_val(ctx) = { makeRefCount<CaseNode>(boost::fusion::at_c<0>(attr).root, boost::fusion::at_c<1>(attr),
+                                                     boost::fusion::at_c<2>(attr).root) };
+        };
+        const auto case2_def =
+            ('(' >> x3::lit("case") >> expr >> (*caseClause) >> '(' >> x3::lit("else") >> sequence >> ")" >> ")")[buildCase2];
+        constexpr auto buildCase3 = [](auto& ctx) {
+            auto& attr = x3::_attr(ctx);
+            x3::_val(ctx) = { makeRefCount<CaseNode>(boost::fusion::at_c<0>(attr).root, boost::fusion::at_c<1>(attr),
+                                                     boost::fusion::at_c<2>(attr).root) };
+        };
+        const auto case3_def = ('(' >> x3::lit("case") >> expr >> (*caseClause) >> '(' >> x3::lit("else") >> x3::lit("=>") >>
+                                expr >> ')' >> ')')[buildCase3];
         constexpr auto buildLogicOr = [](auto& ctx) { x3::_val(ctx) = { makeRefCount<LogicOr>(removePack(x3::_attr(ctx))) }; };
         const auto logicOr_def = ('(' >> x3::lit("or") >> (*expr) >> ')')[buildLogicOr];
         constexpr auto buildLogicAnd = [](auto& ctx) { x3::_val(ctx) = { makeRefCount<LogicAnd>(removePack(x3::_attr(ctx))) }; };
         const auto logicAnd_def = ('(' >> x3::lit("and") >> (*expr) >> ')')[buildLogicAnd];
+        constexpr auto buildWhen = [](auto& ctx) {
+            auto& attr = x3::_attr(ctx);
+            x3::_val(
+                ctx) = { makeRefCount<WhenNode<true>>(boost::fusion::at_c<0>(attr).root, boost::fusion::at_c<1>(attr).root) };
+        };
+        const auto when_def = ('(' >> x3::lit("when") >> expr >> sequence >> ')')[buildWhen];
+        constexpr auto buildUnless = [](auto& ctx) {
+            auto& attr = x3::_attr(ctx);
+            x3::_val(
+                ctx) = { makeRefCount<WhenNode<false>>(boost::fusion::at_c<0>(attr).root, boost::fusion::at_c<1>(attr).root) };
+        };
+        const auto unless_def = ('(' >> x3::lit("unless") >> expr >> sequence >> ')')[buildUnless];
         constexpr auto buildLet1 = [](auto& ctx) {
-            // TODO: Not implemented
-            throwNotImplementedError();
+            const auto& attr = x3::_attr(ctx);
+            x3::_val(ctx) = { makeRefCount<LetNode>(removePack(boost::fusion::at_c<0>(attr)), boost::fusion::at_c<1>(attr).root,
+                                                    true) };
         };
         const auto let1_def = ('(' >> x3::lit("let") >> '(' >> *bindingSpec >> ')' >> body >> ')')[buildLet1];
         constexpr auto buildLet2 = [](auto& ctx) {
+            const auto& attr = x3::_attr(ctx);
+            x3::_val(ctx) = { makeRefCount<LetNode>(removePack(boost::fusion::at_c<0>(attr)), boost::fusion::at_c<1>(attr).root,
+                                                    false) };
+        };
+        const auto let2_def = ('(' >> x3::lit("let*") >> '(' >> *bindingSpec >> ')' >> body >> ')')[buildLet2];
+        constexpr auto buildLet3 = [](auto& ctx) {
             // TODO: Not implemented
             throwNotImplementedError();
         };
-        const auto let2_def = ('(' >> x3::lit("let") >> identifier >> '(' >> *bindingSpec >> ')' >> body >> ')')[buildLet2];
+        const auto let3_def =
+            ('(' >> x3::lit("let") >> identifierPattern >> '(' >> *bindingSpec >> ')' >> body >> ')')[buildLet3];
         constexpr auto begin_def = '(' >> x3::lit("begin") >> sequence >> ')';
         constexpr auto buildDo = [](auto& ctx) {
             // TODO: Not implemented
@@ -659,13 +865,14 @@ namespace schemepp {
         };
         const auto doStatement_def =
             ('(' >> x3::lit("do") >> '(' >> *iterSpec >> ')' >> '(' >> expr >> doResult >> ')' >> *expr >> ')')[buildDo];
-        constexpr auto derived_def = begin | logicOr | logicAnd | let1 | let2 | doStatement | quasiQuotation;
+        constexpr auto derived_def = begin | cond2 | cond1 | case1 | case2 | case3 | logicOr | logicAnd | let1 | let2 | let3 |
+            doStatement | quasiQuotation | when | unless;
 
         constexpr auto buildCondClause1 = [](auto& ctx) {
-            // TODO: Not implemented
-            throwNotImplementedError();
+            auto& attr = x3::_attr(ctx);
+            x3::_val(ctx) = std::make_pair(boost::fusion::at_c<0>(attr).root, boost::fusion::at_c<1>(attr).root);
         };
-        const auto condClause1_def = ('(' >> expr >> sequence >> ')')[buildCondClause1];
+        const auto condClause1_def = ('(' >> (expr - "else") >> sequence >> ')')[buildCondClause1];
         constexpr auto buildCondClause2 = [](auto& ctx) {
             // TODO: Not implemented
             throwNotImplementedError();
@@ -677,20 +884,18 @@ namespace schemepp {
         };
         const auto condClause3_def = ('(' >> expr >> x3::lit("=>") >> expr >> ')')[buildCondClause3];
         constexpr auto condClause_def = condClause1 | condClause2 | condClause3;
-        constexpr auto buildCaseClause1 = [](auto& ctx) {
-            // TODO: Not implemented
-            throwNotImplementedError();
+        constexpr auto buildCaseClause = [](auto& ctx) {
+            auto& attr = x3::_attr(ctx);
+            x3::_val(ctx) = std::make_pair(boost::fusion::at_c<0>(attr).root, boost::fusion::at_c<1>(attr).root);
         };
-        const auto caseClause1_def = (x3::lit('(') >> '(' >> *datum >> ')' >> sequence >> ')')[buildCaseClause1];
-        constexpr auto buildCaseClause2 = [](auto& ctx) {
-            // TODO: Not implemented
-            throwNotImplementedError();
-        };
-        const auto caseClause2_def = (x3::lit('(') >> '(' >> *datum >> ')' >> x3::lit("=>") >> expr >> ')')[buildCaseClause2];
+        // const auto caseClause1_def = (x3::lit('(') >> '(' >> *datum >> ')' >> sequence >> ')')[buildCaseClause1];
+        const auto caseClause1_def = (x3::lit('(') >> '(' >> expr >> ')' >> sequence >> ')')[buildCaseClause];
+        // const auto caseClause2_def = (x3::lit('(') >> '(' >> *datum >> ')' >> x3::lit("=>") >> expr >> ')')[buildCaseClause2];
+        const auto caseClause2_def = (x3::lit('(') >> '(' >> expr >> ')' >> x3::lit("=>") >> expr >> ')')[buildCaseClause];
         constexpr auto caseClause_def = caseClause1 | caseClause2;
         constexpr auto buildBindingSpec = [](auto& ctx) {
-            // TODO: Not implemented
-            throwNotImplementedError();
+            const auto& attr = x3::_attr(ctx);
+            x3::_val(ctx) = { makeRefCount<Definition>(boost::fusion::at_c<0>(attr), boost::fusion::at_c<1>(attr).root, false) };
         };
         const auto bindingSpec_def = ('(' >> identifierPattern >> expr >> ')')[buildBindingSpec];
         constexpr auto buildMvBindingSpec = [](auto& ctx) {
@@ -781,8 +986,7 @@ namespace schemepp {
             throwNotImplementedError();
         };
         const auto definition5_def = ('(' >> x3::lit("define-record-type") >> identifierPattern >> constructor >>
-                                      identifierPattern >>
-                                      *fieldSpec >> ')')[buildDefinition5];
+                                      identifierPattern >> *fieldSpec >> ')')[buildDefinition5];
         constexpr auto buildDefinition6 = [](auto& ctx) {
             // TODO: Not implemented
             throwNotImplementedError();
@@ -812,16 +1016,18 @@ namespace schemepp {
                             condClause, bindingSpec, mvBindingSpec, iterSpec, caseLambdaClause, doResult, macroUse, macroBlock,
                             syntaxSpec, include, datum, definition, caseClause, quasiQuotation, transformerSpec, simpleDatum,
                             compoundDatum, list, abbreviation, label, initial, subsequent, symbolElement, peculiarIdentifier,
-                            complex, rational, floatingPoint, rationalPart)
+                            complex, rational, floatingPoint, rationalPart, cond1, cond2, case1, case2, case3)
 
         BOOST_SPIRIT_DEFINE(explicitSign, signSubsequent, dotSubsequent, definitionFormal, constructor, fieldSpec, labeledDatum,
                             booleanTrue, booleanFalse, integer, real, characterGraph, characterUInt, logicOr, logicAnd, let1,
-                            let2, begin, doStatement, iterSpec1, iterSpec2, definition1, definition2, definition3, definition4,
-                            definition5, definition6, condClause1, condClause2, condClause3, caseClause1, caseClause2, list1,
-                            list2, complexPart, identifierPattern)
+                            let2, let3, begin, doStatement, iterSpec1, iterSpec2, definition1, definition2, definition3,
+                            definition4, definition5, definition6, condClause1, condClause2, condClause3, caseClause1,
+                            caseClause2, list1, list2, complexPart, identifierPattern, when, unless)
     };  // namespace parser
 
     Ref<Node> parse(std::string_view statement) {
+        // TODO: remove comments
+
         auto iter = statement.cbegin();
         using Iterator = std::string_view::const_iterator;
         using ErrorHandler = x3::error_handler<Iterator>;

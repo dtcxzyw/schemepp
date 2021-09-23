@@ -41,7 +41,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << Comparer::name() << Comparer::config();
         }
-        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
             if(operands.empty())
                 throwNoOperandError(ctx);
 
@@ -65,7 +65,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX << (Direction ? "UpCase" : "DownCase");
         }
-        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
             if(operands.size() != 1)
                 throwWrongOperandCountError(ctx, 1 << 1, operands.size());
 
@@ -89,7 +89,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << Comparer::name() << Comparer::config();
         }
-        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
             if(operands.empty())
                 throwNoOperandError(ctx);
 

@@ -10,7 +10,7 @@ namespace schemepp {
     public:
         explicit StringImpl(std::string val) : mVal{ std::move(val) } {}
         void printValue(std::ostream& stream) const override {
-            stream << '\"' << mVal << '\"';
+            stream << mVal;
         }
         const std::string& ref() const noexcept override {
             return mVal;

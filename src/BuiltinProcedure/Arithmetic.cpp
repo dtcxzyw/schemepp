@@ -53,7 +53,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "Sum";
         }
-        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
             if(operands.empty())
                 throwNoOperandError(ctx);
 
@@ -70,7 +70,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "Diff";
         }
-        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
             if(operands.empty())
                 throwNoOperandError(ctx);
 
@@ -88,7 +88,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "Mul";
         }
-        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
             if(operands.empty())
                 throwNoOperandError(ctx);
 
@@ -123,7 +123,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "Div";
         }
-        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
             if(operands.size() != 2)
                 throwWrongOperandCountError(ctx, 1 << 2, operands.size());
 
@@ -176,7 +176,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << Comparer<Integer>::name();
         }
-        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
             if(operands.empty())
                 throwNoOperandError(ctx);
 
@@ -199,7 +199,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "Not";
         }
-        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
             if(operands.size() != 1)
                 throwWrongOperandCountError(ctx, 1 << 1, operands.size());
 
@@ -212,7 +212,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "Equal";
         }
-        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
             if(operands.empty())
                 throwNoOperandError(ctx);
 

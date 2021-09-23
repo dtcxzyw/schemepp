@@ -11,7 +11,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "CommandLine";
         }
-        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
             if(!operands.empty())
                 throwWrongOperandCountError(ctx, 1 << 0, operands.size());
             std::string res;
@@ -29,7 +29,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "Exit";
         }
-        [[noreturn]] Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        [[noreturn]] Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
             if(operands.size() > 1)
                 throwWrongOperandCountError(ctx, (1 << 1) | (1 << 0), operands.size());
             std::exit(operands.empty() ? 0 : static_cast<int>(asInteger(operands[0])));  // NOLINT(concurrency-mt-unsafe)
@@ -41,7 +41,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "EmergencyExit";
         }
-        [[noreturn]] Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        [[noreturn]] Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
             if(operands.size() > 1)
                 throwWrongOperandCountError(ctx, (1 << 1) | (1 << 0), operands.size());
             std::quick_exit(operands.empty() ? 0 : static_cast<int>(asInteger(operands[0])));  // NOLINT(concurrency-mt-unsafe)
@@ -53,7 +53,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "GetEnvVar";
         }
-        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
             if(operands.size() != 1)
                 throwWrongOperandCountError(ctx, 1 << 1, operands.size());
             char buf[4096];
@@ -68,7 +68,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "ListEnvVar";
         }
-        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
             if(!operands.empty())
                 throwWrongOperandCountError(ctx, 1 << 0, operands.size());
             auto env = _environ;

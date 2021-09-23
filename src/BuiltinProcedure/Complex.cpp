@@ -10,7 +10,7 @@ namespace schemepp {
         virtual Ref<Value> eval(Complex val) const = 0;
 
     public:
-        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
             if(operands.size() != 1)
                 throwWrongOperandCountError(ctx, 1 << 1, operands.size());
             return eval(asComplex(operands[0]));
@@ -20,7 +20,7 @@ namespace schemepp {
         virtual Complex eval(Real arg0, Real arg1) const = 0;
 
     public:
-        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
             if(operands.size() != 2)
                 throwWrongOperandCountError(ctx, 1 << 2, operands.size());
             return constantComplex(eval(asReal(operands[0]), asReal(operands[1])));

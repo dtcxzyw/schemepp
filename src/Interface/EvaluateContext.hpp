@@ -13,7 +13,7 @@ namespace schemepp {
     };
 
     struct EvaluateContext final {
-        Scope scope;
+        std::reference_wrapper<Scope> scope;
         Ref<InputPort> currentInputPort;
         Ref<OutputPort> currentOutputPort;
         GlobalSettings settings;

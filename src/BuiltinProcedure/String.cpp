@@ -13,7 +13,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "StringConstructor";
         }
-        Ref<Value> apply(EvaluateContext&, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext&, const std::vector<Ref<Value>>& operands) const override {
             std::string str;
             const std::back_insert_iterator iter{ str };
 
@@ -30,7 +30,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "StringRef";
         }
-        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
             if(operands.size() != 2)
                 throwWrongOperandCountError(ctx, 1 << 2, operands.size());
 
@@ -54,7 +54,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "StringModifier";
         }
-        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
             if(operands.size() != 3)
                 throwWrongOperandCountError(ctx, 1 << 3, operands.size());
 
@@ -83,7 +83,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "StringConcat";
         }
-        Ref<Value> apply(EvaluateContext&, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext&, const std::vector<Ref<Value>>& operands) const override {
             std::string str;
             for(auto&& operand : operands)
                 str += asString(operand);
@@ -96,7 +96,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "StringBuilder";
         }
-        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
             if(operands.size() != 1 && operands.size() != 2)
                 throwWrongOperandCountError(ctx, (1 << 1) | (1 << 2), operands.size());
 

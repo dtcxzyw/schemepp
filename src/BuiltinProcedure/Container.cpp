@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 
+#include "Interface/Error.hpp"
 #include "Interface/Scope.hpp"
 #include "Interface/Value.hpp"
 
@@ -11,7 +12,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "VectorConstructor";
         }
-        Ref<Value> apply(EvaluateContext&, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext&, const std::vector<Ref<Value>>& operands) const override {
             return makeVector(operands);
         }
     };
@@ -21,7 +22,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "VectorBuilder";
         }
-        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
             if(operands.size() != 1 && operands.size() != 2)
                 throwWrongOperandCountError(ctx, (1 << 1) | (1 << 2), operands.size());
 
@@ -40,7 +41,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "VectorRef";
         }
-        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
             if(operands.size() != 2)
                 throwWrongOperandCountError(ctx, 1 << 2, operands.size());
 
@@ -61,7 +62,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "VectorModifier";
         }
-        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
             if(operands.size() != 3)
                 throwWrongOperandCountError(ctx, 1 << 3, operands.size());
 
@@ -84,7 +85,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "PairConcat";
         }
-        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
             if(operands.size() != 2)
                 throwWrongOperandCountError(ctx, 1 << 2, operands.size());
 
@@ -98,7 +99,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "PairAccess" << (Position ? "Car" : "Cdr");
         }
-        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
             if(operands.size() != 1)
                 throwWrongOperandCountError(ctx, 1 << 1, operands.size());
 
@@ -113,7 +114,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "PairModifier" << (Position ? "Car" : "Cdr");
         }
-        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
             if(operands.size() != 2)
                 throwWrongOperandCountError(ctx, 1 << 2, operands.size());
 
@@ -128,7 +129,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "ListConstructor";
         }
-        Ref<Value> apply(EvaluateContext&, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext&, const std::vector<Ref<Value>>& operands) const override {
             return makeList({ operands.cbegin(), operands.cend() });
         }
     };
@@ -138,7 +139,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "ListRef";
         }
-        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
             if(operands.size() != 2)
                 throwWrongOperandCountError(ctx, 1 << 2, operands.size());
 
@@ -161,7 +162,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "ListTailRef";
         }
-        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
             if(operands.size() != 2)
                 throwWrongOperandCountError(ctx, 1 << 2, operands.size());
 
@@ -176,6 +177,68 @@ namespace schemepp {
             auto iter = list.cbegin();
             std::advance(iter, offset);
             return makeList({ iter, list.cend() });
+        }
+    };
+
+    class ApplyList final : public Procedure {
+    public:
+        void printValue(std::ostream& stream) const override {
+            stream << PREFIX "ApplyList";
+        }
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
+            if(operands.size() < 2)
+                throw Error{ "At lease two arguments are required." };
+            if(operands[0]->type() != ValueType::procedure)
+                throwMismatchedOperandTypeError(ctx, 0, ValueType::procedure, operands[0]->type());
+            std::vector<Ref<Value>> ops{ operands.cbegin() + 1, operands.cend() - 1 };
+            auto& list = asList(operands.back());
+            ops.insert(ops.cend(), list.cbegin(), list.cend());
+            return dynamic_cast<const Procedure*>(operands[0].get())->apply(ctx, ops);
+        }
+    };
+
+    template <bool DiscardReturnValue>
+    class MapList final : public Procedure {
+    public:
+        void printValue(std::ostream& stream) const override {
+            stream << (DiscardReturnValue ? (PREFIX "ForEach") : (PREFIX "Map"));
+        }
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
+            if(operands.size() < 2)
+                throw Error{ "At lease two arguments are required." };
+            if(operands[0]->type() != ValueType::procedure)
+                throwMismatchedOperandTypeError(ctx, 0, ValueType::procedure, operands[0]->type());
+            const auto procedure = dynamic_cast<const Procedure*>(operands[0].get());
+            std::vector<std::reference_wrapper<const std::list<Ref<Value>>>> lists;
+            lists.reserve(operands.size() - 1);
+            for(size_t i = 1; i < operands.size(); ++i)
+                lists.push_back(std::ref(asList(operands[i])));
+
+            const size_t ops = lists[0].get().size();
+            std::vector<std::list<Ref<Value>>::const_iterator> iterators;
+            iterators.reserve(lists.size());
+            for(auto& list : lists) {
+                iterators.push_back(list.get().cbegin());
+                if(ops != list.get().size()) {
+                    throw Error{ "Mismatched operands count" };
+                }
+            }
+
+            std::list<Ref<Value>> res;
+
+            for(size_t i = 0; i < ops; ++i) {
+                std::vector<Ref<Value>> subOperands;
+                subOperands.reserve(lists.size());
+                for(auto& iterator : iterators) {
+                    subOperands.push_back(*iterator);
+                    ++iterator;
+                }
+                auto value = procedure->apply(ctx, subOperands);
+                if(!DiscardReturnValue)
+                    res.push_back(std::move(value));
+            }
+
+            return res.empty() ? constantBoolean(true) : makeList(std::move(res));
         }
     };
 
@@ -194,6 +257,9 @@ namespace schemepp {
         ADD_BUILTIN_PROCEDURE("list", ListConstructor);
         ADD_BUILTIN_PROCEDURE("list-ref", ListRef);
         ADD_BUILTIN_PROCEDURE("list-tail", ListTailRef);
+        ADD_BUILTIN_PROCEDURE("apply", ApplyList);
+        ADD_BUILTIN_PROCEDURE("map", MapList<false>);
+        ADD_BUILTIN_PROCEDURE("for-each", MapList<true>);
 
 #undef ADD_BUILTIN_PROCEDURE
     }

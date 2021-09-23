@@ -13,16 +13,16 @@ namespace schemepp {
 
     class WriteBase : public Procedure {
     public:
-        virtual void apply(const Ref<Value>& val, std::ostream& stream) = 0;
+        virtual void apply(const Ref<Value>& val, std::ostream& stream) const = 0;
 
     private:
-        Ref<Value> applyValue(const Ref<Value>& val, std::ostream& stream) {
+        Ref<Value> applyValue(const Ref<Value>& val, std::ostream& stream) const {
             apply(val, stream);
             return constantBoolean(static_cast<bool>(stream));
         }
 
     public:
-        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
             if(operands.size() == 2) {
                 return applyValue(operands[0], asOutputPort(operands[1]));
             }
@@ -38,7 +38,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "Display";
         }
-        void apply(const Ref<Value>& val, std::ostream& stream) override {
+        void apply(const Ref<Value>& val, std::ostream& stream) const override {
             val->printValue(stream);
         }
     };
@@ -53,7 +53,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "Newline";
         }
-        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
             if(operands.size() == 1) {
                 return apply(asOutputPort(operands[0]));
             }
@@ -69,7 +69,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "CloseOutputPort";
         }
-        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
             if(operands.size() == 1) {
                 auto&& stream = asOutputPort(operands[0]);
 
@@ -88,7 +88,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "CurrentOutputPort";
         }
-        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
             if(operands.empty()) {
                 return ctx.currentOutputPort;
             }
@@ -101,7 +101,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "WriteChar";
         }
-        void apply(const Ref<Value>& val, std::ostream& stream) override {
+        void apply(const Ref<Value>& val, std::ostream& stream) const override {
             std::string res;
             const std::back_insert_iterator iter{ res };
             utf8::append(asCharacter(val), iter);
@@ -114,7 +114,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "Write";
         }
-        void apply(const Ref<Value>& val, std::ostream& stream) override {
+        void apply(const Ref<Value>& val, std::ostream& stream) const override {
             throwNotImplementedError();
         }
     };

@@ -27,7 +27,7 @@ namespace schemepp {
     }
 
     const std::list<Ref<Value>>& asList(const Ref<Value>& value) {
-        if(value->type() == ValueType::vector) {
+        if(value->type() == ValueType::list) {
             return dynamic_cast<const ListValue*>(value.get())->ref();
         }
         throwMismatchedOperandTypeError(ValueType::list, value->type());

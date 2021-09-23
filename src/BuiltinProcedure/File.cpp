@@ -17,7 +17,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "DeleteFile";
         }
-        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
             if(operands.size() != 1)
                 throwWrongOperandCountError(ctx, 1, operands.size());
             auto& path = asString(operands[0]);
@@ -30,7 +30,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "FileExists";
         }
-        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
             if(operands.size() != 1)
                 throwWrongOperandCountError(ctx, 1, operands.size());
             auto& path = asString(operands[0]);
@@ -80,7 +80,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "OpenInputFile";
         }
-        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
             if(operands.size() != 1)
                 throwWrongOperandCountError(ctx, 1, operands.size());
             auto& path = asString(operands[0]);
@@ -94,7 +94,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "OpenOutputFile";
         }
-        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
             if(operands.size() != 1)
                 throwWrongOperandCountError(ctx, 1, operands.size());
             auto& path = asString(operands[0]);

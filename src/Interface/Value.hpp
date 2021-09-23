@@ -77,7 +77,7 @@ namespace schemepp {
             return ValueType::procedure;
         }
 
-        [[nodiscard]] virtual Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) = 0;
+        [[nodiscard]] virtual Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const = 0;
     };
 
     class InputPort : public Value {
@@ -92,7 +92,7 @@ namespace schemepp {
     class OutputPort : public Value {
     public:
         [[nodiscard]] ValueType type() const noexcept final {
-            return ValueType::inputPort;
+            return ValueType::outputPort;
         }
 
         [[nodiscard]] virtual std::ostream& output() const = 0;

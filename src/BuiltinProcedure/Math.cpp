@@ -47,7 +47,7 @@ namespace schemepp {
         void printValue(std::ostream& stream) const override {
             stream << PREFIX "Exponent";
         }
-        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) override {
+        Ref<Value> apply(EvaluateContext& ctx, const std::vector<Ref<Value>>& operands) const override {
             if(operands.size() != 2)
                 throwWrongOperandCountError(ctx, 1 << 2, operands.size());
 

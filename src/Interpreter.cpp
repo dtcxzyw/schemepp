@@ -37,10 +37,13 @@ namespace schemepp {
     };
 
     class InterpreterImpl final : public Interpreter {
+        Scope mGlobalScope;
         EvaluateContext mContext;
 
     public:
-        InterpreterImpl() : mContext{ {}, makeRefCount<StandardInput>(), makeRefCount<StandardOutput>() } {
+        InterpreterImpl()
+            : mGlobalScope{ nullptr }, mContext{ std::ref(mGlobalScope), makeRefCount<StandardInput>(),
+                                                 makeRefCount<StandardOutput>() } {
             // handle other control-flows
             using namespace std::string_view_literals;
             std::set_terminate([] { fatal("[FATAL] Terminated"sv); });
@@ -53,16 +56,16 @@ namespace schemepp {
             signal(SIGABRT, [](int) { fatal("[FATAL] Aborted"sv); });
             signal(SIGFPE, [](int) { fatal("[FATAL] Arithmetic Exception"sv); });
             // add builtin procedures
-            initializeBuiltinArithmeticProcedure(mContext.scope);
-            initializeBuiltinRTTIProcedure(mContext.scope);
-            initializeBuiltinWriteProcedure(mContext.scope);
-            initializeBuiltinStringProcedure(mContext.scope);
-            initializeBuiltinMathProcedure(mContext.scope);
-            initializeBuiltinFileProcedure(mContext.scope);
-            initializeBuiltinComplexProcedure(mContext.scope);
-            initializeBuiltinCharProcedure(mContext.scope);
-            initializeBuiltinProcessContextProcedure(mContext.scope);
-            initializeBuiltinContainerProcedure(mContext.scope);
+            initializeBuiltinArithmeticProcedure(mGlobalScope);
+            initializeBuiltinRTTIProcedure(mGlobalScope);
+            initializeBuiltinWriteProcedure(mGlobalScope);
+            initializeBuiltinStringProcedure(mGlobalScope);
+            initializeBuiltinMathProcedure(mGlobalScope);
+            initializeBuiltinFileProcedure(mGlobalScope);
+            initializeBuiltinComplexProcedure(mGlobalScope);
+            initializeBuiltinCharProcedure(mGlobalScope);
+            initializeBuiltinProcessContextProcedure(mGlobalScope);
+            initializeBuiltinContainerProcedure(mGlobalScope);
         }
 
         [[nodiscard]] std::string execute(const std::string_view statement) override {
