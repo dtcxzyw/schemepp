@@ -3,12 +3,13 @@
 #pragma once
 #include "Scope.hpp"
 #include "Value.hpp"
+#include <unordered_set>
 
 namespace schemepp {
 
     struct GlobalSettings final {
         bool printAST;
-        std::vector<std::string> builtinExtensions;
+        std::unordered_set<std::string> builtinExtensions;
         bool enableCache;
     };
 

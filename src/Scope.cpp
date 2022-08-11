@@ -5,6 +5,7 @@
 #include <fmt/format.h>
 
 namespace schemepp {
+    // TODO: binary fast search path
     Ref<Value> Scope::insert(const std::string& symbol, Ref<Value> value) {
         if(mSymbols.insert(std::make_pair(symbol, value)).second) {
             return value;

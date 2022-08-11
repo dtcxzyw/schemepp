@@ -11,7 +11,7 @@ namespace schemepp {
         virtual void printAST(std::ostream& stream) const = 0;
     };
 
-    Ref<Node> parse(std::string_view statement);
+    Ref<Node> parse(std::string_view statement, bool printAST);
     std::vector<Ref<Node>> parseFile(std::string_view path);
 
     // serialize & deserialize

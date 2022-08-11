@@ -5,10 +5,12 @@
 #include <string_view>
 
 namespace schemepp {
+    struct GlobalSettings;
+
     class Interpreter : public RefCountBase {
     public:
         [[nodiscard]] virtual std::string execute(std::string_view statement) = 0;
     };
 
-    [[nodiscard]] Ref<Interpreter> createInterpreter();
+    [[nodiscard]] Ref<Interpreter> createInterpreter(GlobalSettings settings);
 }  // namespace schemepp

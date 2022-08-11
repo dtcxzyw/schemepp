@@ -1025,7 +1025,7 @@ namespace schemepp {
                             caseClause2, list1, list2, complexPart, identifierPattern, when, unless)
     };  // namespace parser
 
-    Ref<Node> parse(std::string_view statement) {
+    Ref<Node> parse(std::string_view statement, const bool printAST) {
         // TODO: remove comments
 
         auto iter = statement.cbegin();
@@ -1039,13 +1039,14 @@ namespace schemepp {
         const auto parserWithErrorHandling = x3::with<x3::error_handler_tag>(std::ref(errorHandler))[parser::expr];
 
         if(parser::ParseResult res; x3::phrase_parse(iter, statement.cend(), parserWithErrorHandling, x3::space, res)) {
-            res.root->printAST(std::cout);
-
-            if(iter == statement.end()) {
-                std::cout << std::endl << std::endl;
-
-                return std::move(res.root);
+            if(printAST) {
+                res.root->printAST(std::cout);
+                std::cout << "\n\n" << std::flush;
             }
+
+            if(iter == statement.end())
+                return std::move(res.root);
+
             throw Error{ "not finished" };
         }
 

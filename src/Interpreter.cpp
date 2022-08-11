@@ -41,9 +41,9 @@ namespace schemepp {
         EvaluateContext mContext;
 
     public:
-        InterpreterImpl()
+        explicit InterpreterImpl(GlobalSettings settings)
             : mGlobalScope{ nullptr }, mContext{ std::ref(mGlobalScope), makeRefCount<StandardInput>(),
-                                                 makeRefCount<StandardOutput>() } {
+                                                 makeRefCount<StandardOutput>(), std::move(settings) } {
             // handle other control-flows
             using namespace std::string_view_literals;
             std::set_terminate([] { fatal("[FATAL] Terminated"sv); });
@@ -69,7 +69,7 @@ namespace schemepp {
         }
 
         [[nodiscard]] std::string execute(const std::string_view statement) override {
-            const auto root = parse(statement);
+            const auto root = parse(statement, mContext.settings.printAST);
             const auto res = root->evaluate(mContext);
             std::stringstream ss;
             res->printValue(ss);
@@ -77,7 +77,7 @@ namespace schemepp {
         }
     };
 
-    [[nodiscard]] Ref<Interpreter> createInterpreter() {
-        return makeRefCount<InterpreterImpl>();
+    [[nodiscard]] Ref<Interpreter> createInterpreter(GlobalSettings settings) {
+        return makeRefCount<InterpreterImpl>(std::move(settings));
     }
 }  // namespace schemepp
